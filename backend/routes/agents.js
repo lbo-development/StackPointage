@@ -1,0 +1,201 @@
+import { Router } from 'express';
+import { authMiddleware } from '../middlewares/auth.js';
+import { requireRole, requireServiceScope } from '../middlewares/role.js';
+import { supabase } from '../supabase.js';
+
+const router = Router();
+router.use(authMiddleware);
+
+// GET /api/agents — liste avec tri par cellule → ordre → nom
+router.get('/', requireServiceScope, async (req, res) => {
+  try {
+    const serviceId = req.query.service_id || req.scopedServiceId;
+    let query = supabase
+      .from('agent_assignments')
+      .select(`
+        *,
+        agents(*),
+        cellules(nom, code, couleur),
+        specialites(nom, code, couleur),
+        roulements(nom)
+      `)
+      .eq('is_active', true);
+
+    if (serviceId) query = query.eq('service_id', serviceId);
+
+    // Tri : cellule → ordre dans la cellule → nom alphabétique (fallback)
+    const { data, error } = await query
+      .order('cellule_id')
+      .order('ordre', { ascending: true })
+      .order('agents(nom)', { ascending: true });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/agents/:id
+router.get('/:id', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('agents')
+      .select(`*, agent_assignments(*, services(*), cellules(*), specialites(*), roulements(*))`)
+      .eq('id', req.params.id)
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/agents — créer agent + affectation initiale
+router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => {
+  try {
+    const { nom, prenom, matricule, email, telephone, date_embauche, assignment } = req.body;
+    const { data: agent, error } = await supabase
+      .from('agents')
+      .insert({ nom, prenom, matricule, email, telephone, date_embauche })
+      .select()
+      .single();
+    if (error) throw error;
+
+    if (assignment) {
+      // Calculer le prochain ordre disponible dans cette cellule
+      const { data: existingInCellule } = await supabase
+        .from('agent_assignments')
+        .select('ordre')
+        .eq('cellule_id', assignment.cellule_id)
+        .eq('is_active', true)
+        .order('ordre', { ascending: false })
+        .limit(1);
+
+      const nextOrdre = existingInCellule?.length
+        ? (existingInCellule[0].ordre + 1)
+        : 0;
+
+      const { error: errA } = await supabase.from('agent_assignments').insert({
+        agent_id: agent.id,
+        ...assignment,
+        ordre: assignment.ordre ?? nextOrdre,
+        is_active: true
+      });
+      if (errA) throw errA;
+    }
+
+    res.status(201).json(agent);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/agents/:id — modifier les infos de l'agent
+router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
+  try {
+    const { nom, prenom, matricule, email, telephone, date_embauche } = req.body;
+    const { data, error } = await supabase
+      .from('agents')
+      .update({ nom, prenom, matricule, email, telephone, date_embauche })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/agents/:id/assignments — créer une affectation
+router.post('/:id/assignments', requireRole('admin_app', 'admin_service'), async (req, res) => {
+  try {
+    const { service_id, cellule_id, specialite_id, roulement_id, date_debut, date_fin, ordre } = req.body;
+
+    // Auto-calcul de l'ordre si non fourni
+    let finalOrdre = ordre;
+    if (finalOrdre === undefined || finalOrdre === null) {
+      const { data: last } = await supabase
+        .from('agent_assignments')
+        .select('ordre')
+        .eq('cellule_id', cellule_id)
+        .eq('is_active', true)
+        .order('ordre', { ascending: false })
+        .limit(1);
+      finalOrdre = last?.length ? last[0].ordre + 1 : 0;
+    }
+
+    const { data, error } = await supabase
+      .from('agent_assignments')
+      .insert({
+        agent_id: req.params.id,
+        service_id, cellule_id, specialite_id, roulement_id,
+        date_debut, date_fin,
+        ordre: finalOrdre,
+        is_active: true
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/agents/assignments/:assignmentId/ordre
+ * Modifie l'ordre d'un agent dans sa cellule
+ * Body: { ordre: number }
+ */
+router.patch('/assignments/:assignmentId/ordre', requireRole('admin_app', 'admin_service', 'pointeur'), async (req, res) => {
+  try {
+    const { ordre } = req.body;
+    if (ordre === undefined || ordre < 0) {
+      return res.status(400).json({ error: 'ordre doit être un entier >= 0' });
+    }
+
+    const { data, error } = await supabase
+      .from('agent_assignments')
+      .update({ ordre: parseInt(ordre) })
+      .eq('id', req.params.assignmentId)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/agents/assignments/reorder
+ * Réordonne en masse tous les agents d'une cellule
+ * Body: { cellule_id, ordres: [{ assignment_id, ordre }] }
+ */
+router.post('/assignments/reorder', requireRole('admin_app', 'admin_service', 'pointeur'), async (req, res) => {
+  try {
+    const { ordres } = req.body; // [{ assignment_id, ordre }]
+    if (!Array.isArray(ordres) || !ordres.length) {
+      return res.status(400).json({ error: 'ordres[] requis' });
+    }
+
+    // Update en parallèle
+    const updates = ordres.map(({ assignment_id, ordre }) =>
+      supabase
+        .from('agent_assignments')
+        .update({ ordre: parseInt(ordre) })
+        .eq('id', assignment_id)
+    );
+
+    const results = await Promise.all(updates);
+    const errors = results.filter(r => r.error);
+    if (errors.length) throw new Error(errors[0].error.message);
+
+    res.json({ success: true, updated: ordres.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+export default router;
