@@ -20,7 +20,7 @@ router.get('/', requireServiceScope, async (req, res) => {
 
 router.post('/', requireRole('admin_app', 'admin_service'), requireServiceScope, async (req, res) => {
   try {
-    const { nom, description, longueur_cycle, date_debut_reference, service_id, cycles } = req.body;
+    const { nom, description, longueur_cycle, date_debut_reference, service_id, feries_non_travailles, cycles } = req.body;
 
     let sid;
     // service_id explicitement null = roulement global (admin_app uniquement)
@@ -35,7 +35,7 @@ router.post('/', requireRole('admin_app', 'admin_service'), requireServiceScope,
 
     const { data: roulement, error } = await supabase
       .from('roulements')
-      .insert({ nom, description, longueur_cycle, date_debut_reference, service_id: sid })
+      .insert({ nom, description, longueur_cycle, date_debut_reference, service_id: sid, feries_non_travailles: feries_non_travailles ?? false })
       .select().single();
     if (error) throw error;
 

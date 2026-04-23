@@ -58,7 +58,7 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, mode = 'reel') 
   // 6. Pointages réels
   const { data: pointages } = await supabase
     .from('pointages')
-    .select('agent_id, date, code_pointage, commentaire, is_locked')
+    .select('id, agent_id, date, code_pointage, commentaire, is_locked')
     .in('agent_id', agentIds)
     .gte('date', dateDebut)
     .lte('date', dateFin);
@@ -82,7 +82,7 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, mode = 'reel') 
   // 9. Codes de pointage pour les couleurs
   const { data: codes } = await supabase
     .from('codes_pointage')
-    .select('code, bg_color, text_color, type, libelle')
+    .select('code, bg_color, text_color, type, libelle, is_locked')
     .or(`service_id.eq.${serviceId},is_global.eq.true`);
   const codesMap = {};
   (codes || []).forEach(c => { codesMap[c.code] = c; });
@@ -91,7 +91,7 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, mode = 'reel') 
   const rPointages = {}; // agentId -> date -> {code, commentaire, is_locked}
   (pointages || []).forEach(p => {
     if (!rPointages[p.agent_id]) rPointages[p.agent_id] = {};
-    rPointages[p.agent_id][p.date] = { code: p.code_pointage, commentaire: p.commentaire, is_locked: p.is_locked, source: 'reel' };
+    rPointages[p.agent_id][p.date] = { id: p.id, code: p.code_pointage, commentaire: p.commentaire, is_locked: p.is_locked, source: 'reel' };
   });
 
   const rPrevisions = {};
@@ -130,7 +130,13 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, mode = 'reel') 
         if (code) theorique = { code, source: 'roulement' };
       }
 
-      ligneReel[dateStr] = reel;
+      // Entrée réelle synthétique : jour férié + roulement feries_non_travailles + pas de saisie réelle
+      let effectiveReel = reel;
+      if (!reel && feriesSet.has(dateStr) && roulement?.feries_non_travailles) {
+        effectiveReel = { code: 'FE', source: 'ferie-auto', is_locked: false };
+      }
+
+      ligneReel[dateStr] = effectiveReel;
       ligneTheorique[dateStr] = theorique;
     });
 

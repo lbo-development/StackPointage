@@ -119,11 +119,39 @@ html, body, #root {
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
+  transition: width 0.22s ease;
+}
+
+.sidebar.collapsed {
+  width: 0;
+  border-right: none;
 }
 
 .sidebar-scrollable {
   flex: 1;
   overflow-y: auto;
+}
+
+/* ============ BOUTON BASCULE SIDEBAR ============ */
+.sidebar-collapse-btn {
+  flex-shrink: 0;
+  width: 14px;
+  background: var(--bg-panel);
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s;
+  padding: 0;
+}
+
+.sidebar-collapse-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* ============ SIDEBAR FOOTER / SETTINGS ============ */
@@ -240,12 +268,37 @@ html, body, #root {
 }
 
 .sidebar-section-header {
-  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 8px 12px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.sidebar-section-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.sidebar-section-actions button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius);
+  line-height: 1;
+  transition: background 0.1s, color 0.1s;
+}
+
+.sidebar-section-actions button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .tree-item {
@@ -368,7 +421,7 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
 .matrix-container {
   overflow: auto;
   max-width: 100%;
-  max-height: calc(100vh - var(--header-h) - 100px);
+  max-height: calc(100vh - var(--header-h) - 54px);
   position: relative;
 }
 
@@ -393,9 +446,17 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
   z-index: 2;
 }
 
-.matrix-table .col-sticky-2 { left: 70px; }
-.matrix-table .col-sticky-3 { left: 140px; }
-.matrix-table .col-sticky-4 { left: 230px; }
+.matrix-table .col-sticky-2 { left: 32px; }
+.matrix-table .col-sticky-3 { left: 162px; }
+
+/* Fond opaque obligatoire + couche GPU pour toutes les cellules figées en tbody */
+.matrix-table tbody .col-sticky {
+  background: var(--bg-app);
+  will-change: transform;
+}
+.matrix-table tbody tr:hover .col-sticky {
+  background: var(--bg-hover);
+}
 
 .matrix-table th {
   background: var(--bg-panel);
@@ -452,14 +513,14 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
 
 .pointage-cell.theorique .code-text { opacity: 0.6; font-style: italic; }
 
-/* Indicateur commentaire */
+/* Indicateur commentaire — triangle rouge coin haut-droit (style Excel) */
 .pointage-cell::after {
   content: '';
   position: absolute;
-  top: 2px; right: 2px;
-  width: 4px; height: 4px;
-  border-radius: 50%;
-  background: var(--warning);
+  top: 0; right: 0;
+  width: 0; height: 0;
+  border-top: 8px solid var(--danger);
+  border-left: 8px solid transparent;
   display: none;
 }
 
@@ -468,8 +529,17 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
 /* Cellule convocation */
 .pointage-cell.has-convoc { outline: 2px dashed var(--info); }
 
+/* Sélection drag */
+.pointage-cell.drag-selected {
+  background: var(--accent-dim) !important;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  z-index: 2;
+}
+
 /* Lignes */
 .matrix-table tr:hover .agent-cell { background: var(--bg-hover); }
+.matrix-table tbody tr:hover .agent-cell.col-sticky { background: var(--bg-hover); }
 
 /* Séparateur cellule */
 .row-cellule-header td {
@@ -484,7 +554,7 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
 
 /* Cumuls */
 .cumuls-row td {
-  background: var(--bg-surface);
+  background: var(--bg-surface) !important;
   font-size: 10px;
   text-align: center;
   font-weight: 600;
@@ -492,29 +562,6 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
   padding: 2px 4px;
 }
 
-/* ============ LÉGENDE ============ */
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 16px;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border);
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  color: var(--text-secondary);
-}
-
-.legend-swatch {
-  width: 16px; height: 14px;
-  border-radius: 2px;
-  border: 1px solid rgba(255,255,255,0.1);
-}
 
 /* ============ CONTEXT MENU ============ */
 .context-menu {
@@ -619,6 +666,22 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
 .modal-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
 
+/* ============ LISTE CODES POINTAGE (modal) ============ */
+.code-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+  background: transparent;
+}
+
+.code-list-item:last-child { border-bottom: none; }
+.code-list-item:hover { background: var(--bg-hover); }
+.code-list-item.selected { background: var(--bg-active); }
+
 /* ============ TABLES CRUD ============ */
 .data-table {
   width: 100%;
@@ -717,6 +780,15 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
 ::-webkit-scrollbar-track { background: var(--bg-app); }
 ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Scrollbar invisible sur le panneau gauche figé de la matrice */
+.matrix-left-body::-webkit-scrollbar { display: none; }
+
+/* Scrollbar horizontale plus haute sur le panneau dates */
+.matrix-scroll-panel::-webkit-scrollbar { height: 12px; }
+.matrix-scroll-panel::-webkit-scrollbar-track { background: var(--bg-panel); }
+.matrix-scroll-panel::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 6px; border: 2px solid var(--bg-panel); }
+.matrix-scroll-panel::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ============ LOADING ============ */
 .loading-spinner {

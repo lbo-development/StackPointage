@@ -143,7 +143,7 @@ CREATE TABLE codes_pointage (
   service_id UUID REFERENCES services(id),
   code TEXT NOT NULL,
   libelle TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('matin','apres_midi','nuit','journee','absence','conge','repos','autre')),
+  type TEXT NOT NULL CHECK (type = ANY (ARRAY['Présence'::text, 'Repos'::text, 'Congé'::text, 'Maladie'::text, 'Absence'::text, 'Autre absence'::text, 'Autre présence'::text, 'Autre'::text])),
   bg_color TEXT DEFAULT '#FFFFFF',
   text_color TEXT DEFAULT '#000000',
   is_locked BOOLEAN DEFAULT FALSE,

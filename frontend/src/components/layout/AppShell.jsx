@@ -22,18 +22,20 @@ export default function AppShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef(null);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true');
 
   useEffect(() => {
     if (!api) return;
     api.get('/services').then(data => {
       setServices(data);
+      // Tout déplier par défaut
+      const allExpanded = {};
+      data.forEach(s => { allExpanded[s.id] = true; });
+      setExpandedServices(allExpanded);
       // Auto-sélection du service de l'utilisateur
       if (profile?.service_id && !selectedService) {
         const svc = data.find(s => s.id === profile.service_id);
-        if (svc) {
-          setSelectedService(svc);
-          setExpandedServices(prev => ({ ...prev, [svc.id]: true }));
-        }
+        if (svc) setSelectedService(svc);
       } else if (isAdmin && data.length > 0 && !selectedService) {
         setSelectedService(data[0]);
       }
@@ -60,13 +62,32 @@ export default function AppShell() {
     setExpandedServices(prev => ({ ...prev, [serviceId]: !prev[serviceId] }));
   }
 
+  function expandAll() {
+    const all = {};
+    services.forEach(s => { all[s.id] = true; });
+    setExpandedServices(all);
+  }
+
+  function collapseAll() {
+    setExpandedServices({});
+  }
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', sidebarCollapsed);
+  }, [sidebarCollapsed]);
+
   function toggleTheme() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  }
+
+  function toggleSidebar() {
+    setSidebarCollapsed(prev => !prev);
+    if (settingsOpen) setSettingsOpen(false);
   }
 
   useEffect(() => {
@@ -127,10 +148,16 @@ export default function AppShell() {
       {/* BODY */}
       <div className="app-body">
         {/* SIDEBAR - Arborescence Services/Cellules */}
-        <aside className="sidebar">
+        <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
           <div className="sidebar-scrollable">
             <div className="sidebar-section">
-              <div className="sidebar-section-header">Services</div>
+              <div className="sidebar-section-header">
+                <span>Services</span>
+                <div className="sidebar-section-actions">
+                  <button onClick={expandAll} title="Tout déplier">⊞</button>
+                  <button onClick={collapseAll} title="Tout replier">⊟</button>
+                </div>
+              </div>
               {services.map(svc => (
                 <div key={svc.id}>
                   <div
@@ -141,12 +168,11 @@ export default function AppShell() {
                       toggleService(svc.id);
                     }}
                   >
-                    <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                       {expandedServices[svc.id] ? '▾' : '▸'}
                     </span>
-                    <span style={{ flex: 1 }}>{svc.nom}</span>
-                    {svc.nb_agents > 0 && <span className="badge badge-count">{svc.nb_agents}</span>}
-                    <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{svc.code}</span>
+                    <span style={{ flex: 1, fontSize: 13 }}>{svc.nom}</span>
+                    {svc.nb_agents > 0 && <span className="badge badge-gray">{svc.nb_agents}</span>}
                   </div>
 
                   {expandedServices[svc.id] && (
@@ -199,6 +225,15 @@ export default function AppShell() {
           )}
         </aside>
 
+        {/* BOUTON BASCULE SIDEBAR */}
+        <button
+          className="sidebar-collapse-btn"
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? 'Afficher la sidebar' : 'Masquer la sidebar'}
+        >
+          {sidebarCollapsed ? '›' : '‹'}
+        </button>
+
         {/* CONTENU PRINCIPAL */}
         <main className="main-content">
           <Outlet context={{ selectedService, selectedCellule, setSelectedService, setSelectedCellule }} />
@@ -226,7 +261,7 @@ function CellulesTree({ serviceId, api, selectedCellule, onSelect }) {
         >
           <span className="dot" style={{ background: c.couleur }} />
           <span style={{ flex: 1 }}>{c.nom}</span>
-          {c.nb_agents > 0 && <span className="badge badge-count">{c.nb_agents}</span>}
+          {c.nb_agents > 0 && <span className="badge badge-gray">{c.nb_agents}</span>}
         </div>
       ))}
     </>

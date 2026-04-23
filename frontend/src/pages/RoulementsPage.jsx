@@ -301,9 +301,9 @@ function RoulementCalendar({ roulements, codesMap, calDates, feriesSet, calendar
                   )}
                 </td>
                 {calDates.map(dateStr => {
-                  const code = calcRoulementCode(r, dateStr);
-                  const codeInfo = code ? codesMap[code] : null;
                   const { isSam, isDim, isFerie, isToday } = getDayInfo(dateStr, feriesSet);
+                  const code = (isFerie && r.feries_non_travailles) ? 'FE' : calcRoulementCode(r, dateStr);
+                  const codeInfo = code ? codesMap[code] : null;
                   const isFirstOfMonth = new Date(dateStr + 'T00:00:00').getDate() === 1;
 
                   let bg = codeInfo?.bg_color || 'transparent';
@@ -352,6 +352,7 @@ function RoulementModal({ roulement, codes, serviceId, api, isAdmin, onClose, on
   const [longueur, setLongueur] = useState(roulement?.longueur_cycle || 6);
   const [dateRef, setDateRef] = useState(roulement?.date_debut_reference || new Date().toISOString().split('T')[0]);
   const [isGlobal, setIsGlobal] = useState(roulement ? !roulement.service_id : false);
+  const [feriesNonTravailles, setFeriesNonTravailles] = useState(roulement?.feries_non_travailles ?? false);
   const [cycles, setCycles] = useState(
     roulement?.roulement_cycles
       ? [...roulement.roulement_cycles].sort((a, b) => a.index_jour - b.index_jour).map(c => ({ code: c.code_pointage, label: c.label || '' }))
@@ -377,6 +378,7 @@ function RoulementModal({ roulement, codes, serviceId, api, isAdmin, onClose, on
         longueur_cycle: parseInt(longueur),
         date_debut_reference: dateRef,
         service_id: isGlobal ? null : serviceId,
+        feries_non_travailles: feriesNonTravailles,
         cycles
       };
       if (roulement) await api.put(`/roulements/${roulement.id}`, payload);
@@ -399,6 +401,23 @@ function RoulementModal({ roulement, codes, serviceId, api, isAdmin, onClose, on
             <div className="form-group" style={{ flex: 1 }}><label>Longueur cycle (jours)</label><input type="number" min={1} max={90} value={longueur} onChange={e => setLongueur(e.target.value)} /></div>
           </div>
           <div className="form-group"><label>Date de référence (début du cycle)</label><input type="date" value={dateRef} onChange={e => setDateRef(e.target.value)} /></div>
+
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={feriesNonTravailles}
+                onChange={e => setFeriesNonTravailles(e.target.checked)}
+                style={{ width: 16, height: 16 }}
+              />
+              <span>Jours fériés non travaillés (affiche FE automatiquement)</span>
+            </label>
+            {feriesNonTravailles && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, marginLeft: 24 }}>
+                Les jours fériés seront affichés avec le code <strong>FE</strong> (Férié non travaillé) sauf saisie manuelle.
+              </div>
+            )}
+          </div>
 
           {isAdmin && (
             <div className="form-group">

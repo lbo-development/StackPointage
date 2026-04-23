@@ -1,33 +1,47 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import PointageMatrix from '../components/matrix/PointageMatrix.jsx';
-import ContextMenu from '../components/matrix/ContextMenu.jsx';
 import PointageModal from '../components/matrix/PointageModal.jsx';
-import PeriodeModal from '../components/matrix/PeriodeModal.jsx';
 
-function formatDate(d) { return d.toISOString().split('T')[0]; }
-function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+// Formate en YYYY-MM-DD en heure locale (évite le décalage UTC)
+function formatDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function addDays(d, n) {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function parseLocal(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
 
 export default function PointageMatrixPage() {
   const { api, can, profile } = useAuth();
   const { selectedService, selectedCellule } = useOutletContext();
 
-  // Plage de dates
-  const [dateDebut, setDateDebut] = useState(() => formatDate(addDays(new Date(), -7)));
-  const [dateFin, setDateFin] = useState(() => formatDate(addDays(new Date(), 7)));
-  const [mode, setMode] = useState('reel'); // 'reel' | 'theorique'
-  const [periode, setPeriode] = useState('15j'); // '15j' | 'mois'
+  const [duree, setDuree]         = useState(31);   // 31 ou 62 jours
+  const [dateDebut, setDateDebut] = useState(() => formatDate(new Date()));
+  const [mode, setMode]           = useState('reel');
 
-  // Données matrice
+  // dateFin toujours dérivé de dateDebut + duree - 1
+  const dateFin = useMemo(
+    () => formatDate(addDays(parseLocal(dateDebut), duree - 1)),
+    [dateDebut, duree]
+  );
+
   const [matrixData, setMatrixData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState('');
 
-  // UI
-  const [contextMenu, setContextMenu] = useState(null);
   const [pointageModal, setPointageModal] = useState(null);
-  const [periodeModal, setPeriodeModal] = useState(false);
 
   const loadMatrix = useCallback(async () => {
     const serviceId = selectedService?.id || profile?.service_id;
@@ -48,7 +62,6 @@ export default function PointageMatrixPage() {
 
   useEffect(() => { loadMatrix(); }, [loadMatrix]);
 
-  // Filtre par cellule si sélectionnée
   const filteredData = matrixData ? {
     ...matrixData,
     agents: selectedCellule
@@ -56,65 +69,63 @@ export default function PointageMatrixPage() {
       : matrixData.agents
   } : null;
 
-  // Navigation temporelle
+  // --- Navigation ---
   function shiftPeriod(dir) {
-    const days = periode === 'mois' ? 30 : 15;
-    setDateDebut(formatDate(addDays(new Date(dateDebut), dir * days)));
-    setDateFin(formatDate(addDays(new Date(dateFin), dir * days)));
+    setDateDebut(prev => formatDate(addDays(parseLocal(prev), dir * duree)));
   }
 
   function goToToday() {
-    const days = periode === 'mois' ? 30 : 15;
-    setDateDebut(formatDate(addDays(new Date(), -Math.floor(days / 2))));
-    setDateFin(formatDate(addDays(new Date(), Math.floor(days / 2))));
+    setDateDebut(formatDate(new Date()));
   }
 
-  function setPeriodeMode(p) {
-    setPeriode(p);
+  // --- Combobox mois ---
+  const monthOptions = useMemo(() => {
     const today = new Date();
-    if (p === 'mois') {
-      setDateDebut(formatDate(new Date(today.getFullYear(), today.getMonth(), 1)));
-      setDateFin(formatDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
-    } else {
-      setDateDebut(formatDate(addDays(today, -7)));
-      setDateFin(formatDate(addDays(today, 7)));
+    const opts = [];
+    for (let i = -3; i <= 12; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      opts.push({
+        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+      });
     }
+    return opts;
+  }, []);
+
+  // Valeur sélectionnée = mois du dateDebut si le 1er du mois, sinon vide
+  const selectedMonthValue = useMemo(() => {
+    const d = parseLocal(dateDebut);
+    if (d.getDate() !== 1) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, [dateDebut]);
+
+  function handleMonthSelect(e) {
+    const val = e.target.value;
+    if (!val) return;
+    const [y, m] = val.split('-').map(Number);
+    setDateDebut(formatDate(new Date(y, m - 1, 1)));
   }
 
-  // Clic sur cellule de pointage
-  function handleCellClick(agent, date, currentCode, isLocked) {
+  function handleDureeToggle(d) {
+    setDuree(d);
+    // dateFin se recalcule automatiquement via useMemo
+  }
+
+  // --- Pointage ---
+
+  // Clic droit sur une cellule (plage sélectionnée ou cellule seule)
+  function handleRightClick(agent, dateDebut, dateFin, currentCode, currentCommentaire = '') {
     if (!can('edit_pointage')) return;
-    if (isLocked) return;
-    setPointageModal({ agent, date, currentCode });
-    setContextMenu(null);
+    setPointageModal({ agent, dateDebut, dateFin, currentCode, currentCommentaire });
   }
 
-  // Clic droit sur cellule
-  function handleCellContextMenu(e, agent, date, currentCode) {
-    e.preventDefault();
-    const codes = matrixData?.codesMap ? Object.values(matrixData.codesMap) : [];
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      agent,
-      date,
-      currentCode,
-      codes,
-      convocations: filteredData?.agents.find(a => a.agent.id === agent.id)?.convocations?.[date] || []
-    });
-  }
-
-  async function handleSavePointage({ agentId, date, code, commentaire }) {
+  async function handleResetPointage({ agentId, dateDebut, dateFin }) {
     try {
       const assignment = matrixData?.agents.find(a => a.agent.id === agentId);
-      await api.post('/pointages', {
-        agent_id: agentId,
-        date,
-        code_pointage: code,
-        commentaire,
-        service_id: selectedService?.id || profile?.service_id,
-        cellule_id: assignment?.cellule_id
-      });
+      const toDelete = dateRange(dateDebut, dateFin)
+        .map(date => assignment?.reel[date])
+        .filter(reel => reel && !reel.is_locked && reel.id);
+      await Promise.all(toDelete.map(reel => api.delete(`/pointages/${reel.id}`)));
       setPointageModal(null);
       loadMatrix();
     } catch (err) {
@@ -122,19 +133,64 @@ export default function PointageMatrixPage() {
     }
   }
 
-  async function handleCodeFromContextMenu(code) {
-    if (!contextMenu || !can('edit_pointage')) return;
-    const { agent, date } = contextMenu;
+  // Génère toutes les dates entre debut et fin inclus
+  function dateRange(debut, fin) {
+    const dates = [];
+    let cur = parseLocal(debut);
+    const end = parseLocal(fin);
+    while (cur <= end) {
+      dates.push(formatDate(cur));
+      cur = addDays(cur, 1);
+    }
+    return dates;
+  }
+
+  async function handleSavePointage({ agentId, dateDebut, dateFin, code, commentaire }) {
     try {
-      const assignment = matrixData?.agents.find(a => a.agent.id === agent.id);
-      await api.post('/pointages', {
-        agent_id: agent.id,
-        date,
-        code_pointage: code,
-        service_id: selectedService?.id || profile?.service_id,
-        cellule_id: assignment?.cellule_id
-      });
-      setContextMenu(null);
+      const assignment = matrixData?.agents.find(a => a.agent.id === agentId);
+      const serviceId  = selectedService?.id || profile?.service_id;
+      const codesMap   = matrixData?.codesMap || {};
+
+      const toSave   = []; // dates où on enregistre le code réel
+      const toDelete = []; // ids de pointages réels à supprimer
+      const isRange  = dateDebut !== dateFin;
+
+      for (const date of dateRange(dateDebut, dateFin)) {
+        const reelEntry      = assignment?.reel[date];
+        const theoriqueEntry = assignment?.theorique[date];
+
+        if (reelEntry) {
+          // Code réel existant : verrouillé ou FE sur une plage → on ne touche pas
+          if (reelEntry.is_locked) continue;
+          if (isRange && reelEntry.code === 'FE') continue;
+          // Nouveau code == code théorique → supprimer le réel (le théorique reprend)
+          if (theoriqueEntry && code === theoriqueEntry.code) {
+            if (reelEntry.id) toDelete.push(reelEntry.id);
+          } else {
+            toSave.push(date);
+          }
+        } else {
+          // Pas de code réel, code théorique seul
+          if (theoriqueEntry) {
+            const codeObj = codesMap[theoriqueEntry.code];
+            // Code théorique verrouillé → on ne touche pas
+            if (codeObj?.is_locked) continue;
+            // Nouveau code == code théorique → rien à faire
+            if (code === theoriqueEntry.code) continue;
+          }
+          toSave.push(date);
+        }
+      }
+
+      await Promise.all([
+        ...toSave.map(date => api.post('/pointages', {
+          agent_id: agentId, date, code_pointage: code, commentaire,
+          service_id: serviceId, cellule_id: assignment?.cellule_id
+        })),
+        ...toDelete.map(id => api.delete(`/pointages/${id}`))
+      ]);
+
+      setPointageModal(null);
       loadMatrix();
     } catch (err) {
       alert('Erreur: ' + err.message);
@@ -145,8 +201,7 @@ export default function PointageMatrixPage() {
     try {
       await api.downloadExcel({
         service_id: selectedService?.id || profile?.service_id,
-        date_debut: dateDebut,
-        date_fin: dateFin
+        date_debut: dateDebut, date_fin: dateFin
       });
     } catch (err) {
       alert('Export échoué: ' + err.message);
@@ -157,34 +212,42 @@ export default function PointageMatrixPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* TOOLBAR */}
       <div className="toolbar">
-        <div className="toggle-group">
-          <button className={`toggle-btn ${periode === '15j' ? 'active' : ''}`} onClick={() => setPeriodeMode('15j')}>15j</button>
-          <button className={`toggle-btn ${periode === 'mois' ? 'active' : ''}`} onClick={() => setPeriodeMode('mois')}>Mois</button>
-        </div>
-
         <button className="btn btn-sm" onClick={() => shiftPeriod(-1)}>◀</button>
         <button className="btn btn-sm" onClick={goToToday}>Aujourd'hui</button>
         <button className="btn btn-sm" onClick={() => shiftPeriod(1)}>▶</button>
 
-        <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} style={{ width: 130 }} />
-        <span style={{ color: 'var(--text-muted)' }}>→</span>
-        <input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} style={{ width: 130 }} />
+        <select
+          value={selectedMonthValue}
+          onChange={handleMonthSelect}
+          style={{ minWidth: 150 }}
+        >
+          <option value="">— Mois —</option>
+          {monthOptions.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+
+        <input
+          type="date"
+          value={dateDebut}
+          onChange={e => setDateDebut(e.target.value)}
+          style={{ width: 130 }}
+        />
+        <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→ {dateFin}</span>
+
+        <div className="toggle-group">
+          <button className={`toggle-btn ${duree === 31 ? 'active' : ''}`} onClick={() => handleDureeToggle(31)}>31j</button>
+          <button className={`toggle-btn ${duree === 62 ? 'active' : ''}`} onClick={() => handleDureeToggle(62)}>62j</button>
+        </div>
 
         <div className="toggle-group">
           <button className={`toggle-btn ${mode === 'reel' ? 'active' : ''}`} onClick={() => setMode('reel')}>Réel</button>
           <button className={`toggle-btn ${mode === 'theorique' ? 'active' : ''}`} onClick={() => setMode('theorique')}>Théorique</button>
         </div>
 
-        {can('edit_pointage') && (
-          <button className="btn btn-sm" onClick={() => setPeriodeModal(true)}>
-            ⊞ Saisie période
-          </button>
-        )}
-
         <button className="btn btn-sm" onClick={handleExport} style={{ marginLeft: 'auto' }}>
           ↓ Export Excel
         </button>
-
         <button className="btn btn-sm" onClick={loadMatrix}>↺ Rafraîchir</button>
 
         {selectedService && (
@@ -194,7 +257,6 @@ export default function PointageMatrixPage() {
         )}
       </div>
 
-      {/* MESSAGES */}
       {error && <div className="alert alert-error" style={{ margin: '8px 16px' }}>{error}</div>}
 
       {loading && (
@@ -204,14 +266,12 @@ export default function PointageMatrixPage() {
         </div>
       )}
 
-      {/* MATRICE */}
       {!loading && filteredData && (
         <PointageMatrix
           data={filteredData}
           mode={mode}
           canEdit={can('edit_pointage')}
-          onCellClick={handleCellClick}
-          onCellContextMenu={handleCellContextMenu}
+          onRightClick={handleRightClick}
         />
       )}
 
@@ -223,41 +283,20 @@ export default function PointageMatrixPage() {
         </div>
       )}
 
-      {/* MODALS / MENUS */}
-      {contextMenu && (
-        <ContextMenu
-          {...contextMenu}
-          canEdit={can('edit_pointage')}
-          onSelectCode={handleCodeFromContextMenu}
-          onClose={() => setContextMenu(null)}
-          onOpenModal={() => {
-            setPointageModal({ agent: contextMenu.agent, date: contextMenu.date, currentCode: contextMenu.currentCode });
-            setContextMenu(null);
-          }}
-        />
-      )}
-
-      {pointageModal && (
-        <PointageModal
-          {...pointageModal}
-          codes={matrixData?.codesMap ? Object.values(matrixData.codesMap) : []}
-          onSave={handleSavePointage}
-          onClose={() => setPointageModal(null)}
-        />
-      )}
-
-      {periodeModal && (
-        <PeriodeModal
-          agents={matrixData?.agents || []}
-          codes={matrixData?.codesMap ? Object.values(matrixData.codesMap) : []}
-          serviceId={selectedService?.id || profile?.service_id}
-          defaultDateDebut={dateDebut}
-          defaultDateFin={dateFin}
-          api={api}
-          onClose={() => setPeriodeModal(false)}
-          onSaved={() => { setPeriodeModal(false); loadMatrix(); }}
-        />
-      )}
+      {pointageModal && (() => {
+        const assignment = matrixData?.agents.find(a => a.agent.id === pointageModal.agent.id);
+        const hasReel = dateRange(pointageModal.dateDebut, pointageModal.dateFin)
+          .some(date => { const r = assignment?.reel[date]; return r && !r.is_locked; });
+        return (
+          <PointageModal
+            {...pointageModal}
+            codes={matrixData?.codesMap ? Object.values(matrixData.codesMap) : []}
+            onSave={handleSavePointage}
+            onReset={hasReel ? handleResetPointage : undefined}
+            onClose={() => setPointageModal(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

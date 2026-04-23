@@ -1,25 +1,56 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 
-const TODAY = new Date().toISOString().split('T')[0];
+const TODAY    = new Date().toISOString().split('T')[0];
+const COL_W    = { indicator: 32, nom: 130, prenom: 100, date: 36 };
+const FROZEN_W = COL_W.indicator + COL_W.nom + COL_W.prenom; // 262px
+const HEAD_H1  = 24;  // ligne mois
+const HEAD_H2  = 50;  // ligne dates
+const ROW_H    = { 'cellule-header': 27, 'specialite-header': 22, agent: 26, cumuls: 22 };
 
 function getDayInfo(dateStr, feriesSet) {
   const d = new Date(dateStr + 'T00:00:00');
-  const dow = d.getDay(); // 0=dim, 6=sam
+  const dow = d.getDay();
   return {
-    isSam: dow === 6,
-    isDim: dow === 0,
-    isWeekend: dow === 0 || dow === 6,
-    isFerie: feriesSet.has(dateStr),
-    isToday: dateStr === TODAY,
+    isSam: dow === 6, isDim: dow === 0,
+    isFerie: feriesSet.has(dateStr), isToday: dateStr === TODAY,
     weekday: d.toLocaleDateString('fr-FR', { weekday: 'short' }),
     day: d.getDate(),
     month: d.toLocaleDateString('fr-FR', { month: 'short' }),
   };
 }
 
-export default function PointageMatrix({ data, mode, canEdit, onCellClick, onCellContextMenu }) {
+function normalizeRange(s) {
+  if (!s) return null;
+  return s.startDate <= s.endDate
+    ? { agentId: s.agentId, startDate: s.startDate, endDate: s.endDate }
+    : { agentId: s.agentId, startDate: s.endDate,   endDate: s.startDate };
+}
+
+export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
   const { dates, cellules, specialites, agents, cumuls, feries, codesMap } = data;
   const feriesSet = useMemo(() => new Set(feries || []), [feries]);
+
+  const [drag, setDrag]           = useState(null);
+  const [selection, setSelection] = useState(null);
+
+  const leftBodyRef   = useRef(null);
+  const rightPanelRef = useRef(null);
+
+  function handleRightScroll() {
+    if (leftBodyRef.current && rightPanelRef.current) {
+      leftBodyRef.current.scrollTop = rightPanelRef.current.scrollTop;
+    }
+  }
+
+  useEffect(() => {
+    function handleMouseUp() {
+      if (!drag) return;
+      setSelection(normalizeRange(drag));
+      setDrag(null);
+    }
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, [drag]);
 
   const monthGroups = useMemo(() => {
     const groups = [];
@@ -36,26 +67,19 @@ export default function PointageMatrix({ data, mode, canEdit, onCellClick, onCel
     return groups;
   }, [dates]);
 
-  // Grouper agents par cellule → spécialité
-  // Tri : ordre (champ agent_assignments.ordre) puis nom en fallback
   const grouped = useMemo(() => {
     const map = {};
     cellules.forEach(c => { map[c.id] = { cellule: c, specialites: {}, agentsDirect: [] }; });
-
-    // Trier les agents par ordre avant de les grouper
     const sorted = [...agents].sort((a, b) => {
       if (a.ordre !== b.ordre) return a.ordre - b.ordre;
-      // Fallback alphabétique si même ordre
       return (a.agent.nom + a.agent.prenom).localeCompare(b.agent.nom + b.agent.prenom);
     });
-
     sorted.forEach(ag => {
       const cid = ag.cellule_id;
       if (!map[cid]) return;
-      const sid = ag.specialite_id;
-      if (sid) {
-        if (!map[cid].specialites[sid]) map[cid].specialites[sid] = [];
-        map[cid].specialites[sid].push(ag);
+      if (ag.specialite_id) {
+        if (!map[cid].specialites[ag.specialite_id]) map[cid].specialites[ag.specialite_id] = [];
+        map[cid].specialites[ag.specialite_id].push(ag);
       } else {
         map[cid].agentsDirect.push(ag);
       }
@@ -77,64 +101,289 @@ export default function PointageMatrix({ data, mode, canEdit, onCellClick, onCel
     );
   }
 
-  // Construire les lignes dans l'ordre cellule > spécialité > agent
   const rows = [];
-
   cellules.forEach(cellule => {
     const group = grouped[cellule.id];
     if (!group) return;
-
-    // En-tête cellule
     rows.push({ type: 'cellule-header', cellule });
-
-    // Agents par spécialité
     Object.entries(group.specialites).forEach(([sid, sAgents]) => {
-      const spec = specialitesMap[sid];
-      rows.push({ type: 'specialite-header', spec, cellule_id: cellule.id });
-      sAgents.forEach(ag => rows.push({ type: 'agent', ag, spec }));
+      rows.push({ type: 'specialite-header', spec: specialitesMap[sid], cellule_id: cellule.id });
+      sAgents.forEach(ag => rows.push({ type: 'agent', ag, spec: specialitesMap[sid] }));
     });
-
-    // Agents sans spécialité
     group.agentsDirect.forEach(ag => rows.push({ type: 'agent', ag, spec: null }));
-
-    // Ligne cumuls cellule
     rows.push({ type: 'cumuls', cellule });
   });
 
+  function isHighlighted(agentId, dateStr) {
+    const s = normalizeRange(drag) || selection;
+    if (!s || s.agentId !== agentId) return false;
+    return dateStr >= s.startDate && dateStr <= s.endDate;
+  }
+
+  function handleContextMenu(e, ag, dateStr, isLocked) {
+    e.preventDefault();
+    if (!canEdit || isLocked) return;
+    const agent = ag.agent;
+    const sel = selection;
+    if (sel && sel.agentId === agent.id && sel.startDate !== sel.endDate && dateStr >= sel.startDate && dateStr <= sel.endDate) {
+      onRightClick(agent, sel.startDate, sel.endDate, '*', '');
+    } else {
+      const reelEntry      = ag.reel[dateStr];
+      const theoriqueEntry = ag.theorique[dateStr];
+      const displayCode    = reelEntry?.code || theoriqueEntry?.code || null;
+      const displayComment = reelEntry?.commentaire || '';
+      onRightClick(agent, dateStr, dateStr, displayCode, displayComment);
+    }
+  }
+
+  const thBase = {
+    background: 'var(--bg-panel)',
+    borderBottom: '1px solid var(--border)',
+    color: 'var(--text-secondary)',
+    fontWeight: 600,
+    fontSize: 10,
+    padding: '4px 6px',
+  };
+
+  // ─── Panneau gauche : divs avec hauteurs exactes ───────────────────────────
+  function renderLeftRow(row) {
+    const h = ROW_H[row.type];
+    const base = {
+      height: h, minHeight: h, maxHeight: h,
+      display: 'flex', alignItems: 'center',
+      flexShrink: 0, overflow: 'hidden', width: FROZEN_W,
+    };
+
+    if (row.type === 'cellule-header') {
+      return (
+        <div key={`L-ch-${row.cellule.id}`} style={{ ...base, background: 'var(--bg-panel)' }}>
+          <div style={{ width: COL_W.indicator, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: row.cellule.couleur }} />
+          </div>
+          <div style={{ flex: 1, fontWeight: 700, fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', overflow: 'hidden', whiteSpace: 'nowrap', paddingRight: 6 }}>
+            {row.cellule.nom}
+          </div>
+        </div>
+      );
+    }
+
+    if (row.type === 'specialite-header') {
+      const spec = row.spec;
+      return (
+        <div key={`L-sh-${row.cellule_id}-${spec?.id}`} style={{ ...base, background: 'var(--bg-app)' }}>
+          <div style={{ width: COL_W.indicator, flexShrink: 0 }} />
+          <div style={{ flex: 1, fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic', padding: '0 4px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            ↳ {spec?.nom}
+          </div>
+        </div>
+      );
+    }
+
+    if (row.type === 'cumuls') {
+      return (
+        <div key={`L-cum-${row.cellule.id}`} style={{ ...base, background: 'var(--bg-surface)', justifyContent: 'flex-end' }}>
+          <span style={{ fontSize: 10, fontStyle: 'italic', color: 'var(--text-muted)', padding: '0 8px' }}>Cumuls ›</span>
+        </div>
+      );
+    }
+
+    // agent
+    const { ag, spec } = row;
+    const agent = ag.agent;
+    return (
+      <div key={`L-ag-${agent.id}`} style={{ ...base, background: 'var(--bg-app)' }}>
+        <div style={{ width: COL_W.indicator, flexShrink: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 11, color: 'var(--text-muted)' }}>
+          {spec?.couleur && (
+            <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: spec.couleur }} />
+          )}
+          —
+        </div>
+        <div style={{ width: COL_W.nom, flexShrink: 0, padding: '0 0 0 10px', fontWeight: 600, fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          {agent.nom}
+        </div>
+        <div style={{ width: COL_W.prenom, flexShrink: 0, padding: '0 0 0 10px', fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          {agent.prenom}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Panneau droit : table avec thead sticky ───────────────────────────────
+  function renderRightRow(row) {
+    const h = ROW_H[row.type];
+
+    if (row.type === 'cellule-header') {
+      return (
+        <tr key={`R-ch-${row.cellule.id}`} style={{ height: h }}>
+          {dates.map(dateStr => (
+            <td key={dateStr} style={{ background: 'var(--bg-panel)', height: h, maxHeight: h }} />
+          ))}
+        </tr>
+      );
+    }
+
+    if (row.type === 'specialite-header') {
+      return (
+        <tr key={`R-sh-${row.cellule_id}-${row.spec?.id}`} style={{ height: h }}>
+          {dates.map(dateStr => (
+            <td key={dateStr} style={{ background: 'var(--bg-app)', height: h, maxHeight: h }} />
+          ))}
+        </tr>
+      );
+    }
+
+    if (row.type === 'cumuls') {
+      const cellCumuls = cumuls[row.cellule.id] || {};
+      return (
+        <tr key={`R-cum-${row.cellule.id}`} style={{ height: h }}>
+          {dates.map(dateStr => {
+            const c = cellCumuls[dateStr] || {};
+            const parts = [];
+            if (c.matin)      parts.push(`M${c.matin}`);
+            if (c.apres_midi) parts.push(`A${c.apres_midi}`);
+            if (c.nuit)       parts.push(`N${c.nuit}`);
+            if (c.journee)    parts.push(`J${c.journee}`);
+            return (
+              <td key={dateStr} style={{ background: 'var(--bg-surface)', fontSize: 10, textAlign: 'center', color: 'var(--text-muted)', padding: '0 2px', height: h, maxHeight: h }}
+                title={`M:${c.matin||0} AM:${c.apres_midi||0} N:${c.nuit||0} J:${c.journee||0}`}>
+                {parts.join(' ')}
+              </td>
+            );
+          })}
+        </tr>
+      );
+    }
+
+    // agent
+    const { ag } = row;
+    const agent = ag.agent;
+    return (
+      <tr key={`R-ag-${agent.id}`} style={{ height: h }}>
+        {dates.map(dateStr => {
+          const reel      = ag.reel[dateStr];
+          const theorique = ag.theorique[dateStr];
+          const entry     = mode === 'theorique' ? (theorique || reel) : (reel || theorique);
+          const isTheorique = !reel && !!theorique;
+          const code      = codesMap[entry?.code];
+          const hasComment = !!entry?.commentaire;
+          const hasConvoc  = !!ag.convocations?.[dateStr]?.length;
+          const isLocked   = reel?.is_locked || false;
+          const highlighted = isHighlighted(agent.id, dateStr);
+
+          const { isSam, isDim, isFerie, isToday } = getDayInfo(dateStr, feriesSet);
+          let cellBg = code?.bg_color || 'transparent';
+          if (!code && isFerie) cellBg = 'rgba(239,68,68,0.1)';
+          else if (!code && isDim) cellBg = 'rgba(139,92,246,0.1)';
+          else if (!code && isSam) cellBg = 'rgba(99,102,241,0.1)';
+          if (isToday && !code) cellBg = 'rgba(59,130,246,0.1)';
+
+          let cls = 'pointage-cell';
+          if (isTheorique)  cls += ' theorique';
+          if (hasComment)   cls += ' has-comment';
+          if (hasConvoc)    cls += ' has-convoc';
+          if (highlighted)  cls += ' drag-selected';
+
+          const title = [
+            code ? `${entry.code} — ${code.libelle}` : '',
+            isTheorique ? '(théorique)' : '',
+            isLocked ? '🔒 Verrouillé' : '',
+            hasComment ? `💬 ${entry.commentaire}` : '',
+            ...(ag.convocations?.[dateStr] || []).map(c => `📋 ${c.intitule}`)
+          ].filter(Boolean).join('\n');
+
+          return (
+            <td
+              key={dateStr}
+              className={cls}
+              style={{
+                background: highlighted ? undefined : cellBg,
+                color: highlighted ? undefined : (code?.text_color || 'inherit'),
+                cursor: canEdit && !isLocked ? 'cell' : 'default',
+                height: h, maxHeight: h,
+              }}
+              title={title}
+              onMouseDown={e => {
+                if (e.button !== 0 || !canEdit || isLocked) return;
+                e.preventDefault();
+                setSelection(null);
+                setDrag({ agentId: agent.id, startDate: dateStr, endDate: dateStr });
+              }}
+              onMouseEnter={() => {
+                if (drag && drag.agentId === agent.id) {
+                  setDrag(prev => ({ ...prev, endDate: dateStr }));
+                }
+              }}
+              onContextMenu={e => handleContextMenu(e, ag, dateStr, isLocked)}
+            >
+              <span className="code-text">
+                {entry?.code || (isFerie ? 'F' : '')}
+                {isLocked && <span style={{ fontSize: 7 }}>🔒</span>}
+              </span>
+            </td>
+          );
+        })}
+      </tr>
+    );
+  }
+
+  // ─── Rendu ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-      <div className="matrix-container">
-        <table className="matrix-table">
+    <div style={{ display: 'flex', flex: 1, overflow: 'hidden', userSelect: drag ? 'none' : undefined }}>
+
+      {/* ══════════════ PANNEAU GAUCHE FIGÉ ══════════════ */}
+      <div style={{
+        flexShrink: 0, width: FROZEN_W,
+        display: 'flex', flexDirection: 'column',
+        borderRight: '2px solid var(--border-light)',
+        zIndex: 1,
+      }}>
+        {/* En-tête — divs avec hauteurs exactes pour correspondre au thead du panneau droit */}
+        <div style={{ height: HEAD_H1, flexShrink: 0, background: 'var(--bg-panel)' }} />
+        <div style={{ height: HEAD_H2, flexShrink: 0, display: 'flex', alignItems: 'center', background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ width: COL_W.indicator, flexShrink: 0 }} />
+          <div style={{ width: COL_W.nom, flexShrink: 0, fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', paddingLeft: 10 }}>Nom</div>
+          <div style={{ width: COL_W.prenom, flexShrink: 0, fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', paddingLeft: 10 }}>Prénom</div>
+        </div>
+
+        {/* Corps — divs pour hauteurs de lignes strictement identiques au panneau droit */}
+        <div
+          ref={leftBodyRef}
+          className="matrix-left-body"
+          style={{ overflowY: 'scroll', flex: 1, scrollbarWidth: 'none' }}
+        >
+          {rows.map(row => renderLeftRow(row))}
+        </div>
+      </div>
+
+      {/* ══════════════ PANNEAU DROIT SCROLLABLE ══════════════ */}
+      <div
+        ref={rightPanelRef}
+        className="matrix-scroll-panel"
+        style={{ flex: 1, overflow: 'auto' }}
+        onScroll={handleRightScroll}
+      >
+        <table style={{ tableLayout: 'fixed', borderCollapse: 'collapse' }}>
+          <colgroup>
+            {dates.map(d => <col key={d} style={{ width: COL_W.date }} />)}
+          </colgroup>
           <thead>
-            {/* Ligne 1 : nom du mois en pleine largeur */}
-            <tr>
-              <th colSpan={4} className="col-sticky" style={{ zIndex: 5, height: 24, padding: '3px 8px', textAlign: 'left', top: 0 }} />
+            <tr style={{ height: HEAD_H1 }}>
               {monthGroups.map(g => (
                 <th key={g.key} colSpan={g.count} style={{
-                  top: 0,
-                  height: 24,
-                  textAlign: 'center',
-                  borderLeft: '2px solid var(--border-light)',
-                  padding: '3px 6px',
-                  fontSize: 11,
-                  fontFamily: 'var(--font-ui)',
-                  textTransform: 'capitalize',
-                  fontWeight: 700,
+                  ...thBase,
+                  position: 'sticky', top: 0, zIndex: 3,
+                  textAlign: 'center', textTransform: 'capitalize',
+                  fontWeight: 700, fontSize: 11,
                   color: 'var(--text-primary)',
-                  zIndex: 3,
+                  borderLeft: '2px solid var(--border-light)',
+                  borderBottom: 'none',
+                  height: HEAD_H1,
                 }}>
                   {g.label}
                 </th>
               ))}
             </tr>
-
-            {/* Ligne 2 : colonnes fixes + dates sur 3 lignes */}
-            <tr>
-              <th className="col-sticky" style={{ minWidth: 70, top: 24, zIndex: 5 }}>Cellule</th>
-              <th className="col-sticky col-sticky-2" style={{ minWidth: 90, top: 24, zIndex: 5 }}>Nom</th>
-              <th className="col-sticky col-sticky-3" style={{ minWidth: 70, top: 24, zIndex: 5 }}>Prénom</th>
-              <th className="col-sticky col-sticky-4" style={{ minWidth: 70, fontFamily: 'var(--font-mono)', fontSize: 10, top: 24, zIndex: 5 }}>Matricule</th>
-
+            <tr style={{ height: HEAD_H2 }}>
               {dates.map(dateStr => {
                 const { isSam, isDim, isFerie, isToday, weekday, day, month } = getDayInfo(dateStr, feriesSet);
                 let cls = 'date-header';
@@ -145,7 +394,8 @@ export default function PointageMatrix({ data, mode, canEdit, onCellClick, onCel
                 const isFirst = new Date(dateStr + 'T00:00:00').getDate() === 1;
                 return (
                   <th key={dateStr} className={cls} title={dateStr} style={{
-                    top: 24,
+                    position: 'sticky', top: HEAD_H1, zIndex: 3,
+                    height: HEAD_H2,
                     ...(isFirst ? { borderLeft: '2px solid var(--border-light)' } : {}),
                   }}>
                     <div style={{ lineHeight: 1.2 }}>
@@ -158,162 +408,12 @@ export default function PointageMatrix({ data, mode, canEdit, onCellClick, onCel
               })}
             </tr>
           </thead>
-
           <tbody>
-            {rows.map((row, i) => {
-              if (row.type === 'cellule-header') {
-                return (
-                  <tr key={`ch-${row.cellule.id}`} className="row-cellule-header">
-                    <td colSpan={4 + dates.length}>
-                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: row.cellule.couleur, marginRight: 6 }} />
-                      {row.cellule.nom}
-                    </td>
-                  </tr>
-                );
-              }
-
-              if (row.type === 'specialite-header') {
-                const spec = row.spec;
-                return (
-                  <tr key={`sh-${row.cellule_id}-${spec?.id}`}>
-                    <td colSpan={4 + dates.length} style={{
-                      background: spec?.couleur ? `${spec.couleur}22` : 'transparent',
-                      padding: '2px 12px',
-                      fontSize: 10,
-                      color: 'var(--text-muted)',
-                      fontStyle: 'italic'
-                    }}>
-                      ↳ {spec?.nom}
-                    </td>
-                  </tr>
-                );
-              }
-
-              if (row.type === 'cumuls') {
-                const cellCumuls = cumuls[row.cellule.id] || {};
-                return (
-                  <tr key={`cum-${row.cellule.id}`} className="cumuls-row">
-                    <td colSpan={4} style={{ textAlign: 'right', paddingRight: 8, fontStyle: 'italic' }}>Cumuls ›</td>
-                    {dates.map(dateStr => {
-                      const c = cellCumuls[dateStr] || {};
-                      const parts = [];
-                      if (c.matin) parts.push(`M${c.matin}`);
-                      if (c.apres_midi) parts.push(`A${c.apres_midi}`);
-                      if (c.nuit) parts.push(`N${c.nuit}`);
-                      if (c.journee) parts.push(`J${c.journee}`);
-                      return (
-                        <td key={dateStr} title={`M:${c.matin||0} AM:${c.apres_midi||0} N:${c.nuit||0} J:${c.journee||0}`}>
-                          {parts.join(' ')}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              }
-
-              // Type 'agent'
-              const { ag } = row;
-              const agent = ag.agent;
-
-              return (
-                <tr key={`ag-${agent.id}`}>
-                  <td className="agent-cell col-sticky" style={{ borderLeft: row.spec ? `3px solid ${row.spec.couleur || 'transparent'}` : undefined }}>
-                    —
-                  </td>
-                  <td className="agent-cell nom col-sticky col-sticky-2">{agent.nom}</td>
-                  <td className="agent-cell prenom col-sticky col-sticky-3">{agent.prenom}</td>
-                  <td className="agent-cell matricule col-sticky col-sticky-4">{agent.matricule}</td>
-
-                  {dates.map(dateStr => {
-                    const reel = ag.reel[dateStr];
-                    const theorique = ag.theorique[dateStr];
-                    const entry = mode === 'theorique' ? (theorique || reel) : (reel || theorique);
-                    const isTheorique = !reel && !!theorique;
-                    const code = codesMap[entry?.code];
-                    const hasComment = !!entry?.commentaire;
-                    const hasConvoc = !!ag.convocations?.[dateStr]?.length;
-                    const isLocked = reel?.is_locked || false;
-
-                    const { isSam, isDim, isFerie, isToday } = getDayInfo(dateStr, feriesSet);
-                    let cellBg = code?.bg_color || 'transparent';
-                    if (!code && isFerie) cellBg = 'rgba(239,68,68,0.1)';
-                    else if (!code && isDim) cellBg = 'rgba(139,92,246,0.1)';
-                    else if (!code && isSam) cellBg = 'rgba(99,102,241,0.1)';
-                    if (isToday && !code) cellBg = 'rgba(59,130,246,0.1)';
-
-                    let cls = 'pointage-cell';
-                    if (isTheorique) cls += ' theorique';
-                    if (hasComment) cls += ' has-comment';
-                    if (hasConvoc) cls += ' has-convoc';
-
-                    const title = [
-                      code ? `${entry.code} — ${code.libelle}` : '',
-                      isTheorique ? '(théorique)' : '',
-                      isLocked ? '🔒 Verrouillé' : '',
-                      hasComment ? `💬 ${entry.commentaire}` : '',
-                      ...(ag.convocations?.[dateStr] || []).map(c => `📋 ${c.intitule}`)
-                    ].filter(Boolean).join('\n');
-
-                    return (
-                      <td
-                        key={dateStr}
-                        className={cls}
-                        style={{ background: cellBg, color: code?.text_color || 'inherit' }}
-                        title={title}
-                        onClick={() => canEdit && !isLocked && onCellClick(agent, dateStr, entry?.code, isLocked)}
-                        onContextMenu={e => onCellContextMenu(e, agent, dateStr, entry?.code)}
-                      >
-                        <span className="code-text">
-                          {entry?.code || (isFerie ? 'F' : '')}
-                          {isLocked && <span style={{ fontSize: 7 }}>🔒</span>}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
+            {rows.map(row => renderRightRow(row))}
           </tbody>
         </table>
       </div>
 
-      {/* LÉGENDE */}
-      <Legend codesMap={codesMap} />
-    </div>
-  );
-}
-
-function Legend({ codesMap }) {
-  return (
-    <div className="legend">
-      <div className="legend-item">
-        <div className="legend-swatch" style={{ background: 'var(--col-sat)' }} />
-        <span>Samedi</span>
-      </div>
-      <div className="legend-item">
-        <div className="legend-swatch" style={{ background: 'var(--col-dim)' }} />
-        <span>Dimanche</span>
-      </div>
-      <div className="legend-item">
-        <div className="legend-swatch" style={{ background: 'var(--col-ferie)' }} />
-        <span>Férié</span>
-      </div>
-      <div className="legend-item">
-        <div className="legend-swatch" style={{ background: 'var(--col-today)' }} />
-        <span>Aujourd'hui</span>
-      </div>
-      <span style={{ color: 'var(--border)', margin: '0 4px' }}>|</span>
-      {Object.values(codesMap).slice(0, 10).map(code => (
-        <div key={code.code} className="legend-item">
-          <div className="legend-swatch" style={{ background: code.bg_color, border: '1px solid rgba(255,255,255,0.2)' }} />
-          <span style={{ color: 'var(--text-secondary)' }}>
-            <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{code.code}</strong> {code.libelle}
-          </span>
-        </div>
-      ))}
-      <div className="legend-item">
-        <span style={{ fontSize: 9, opacity: 0.5, fontStyle: 'italic' }}>Italique = théorique · 🔒 = verrouillé · ● = commentaire · — — = convocation</span>
-      </div>
     </div>
   );
 }

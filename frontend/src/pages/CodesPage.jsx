@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const TYPES = ['Présence','Repos','Congé','Maladie','absence','Autre absence','Autre présence','Autre'];
+const TYPES = ['Présence','Repos','Congé','Maladie','Absence','Autre absence','Autre présence','Autre'];
 
 export default function CodesPage() {
   const { api } = useAuth();
@@ -12,6 +12,8 @@ export default function CodesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editCode, setEditCode] = useState(null);
   const [filterType, setFilterType] = useState('');
+  const [filterGlobal, setFilterGlobal] = useState(null); // null=tous, true=global, false=service
+  const [filterLocked, setFilterLocked] = useState(null); // null=tous, true=verrouillé, false=libre
 
   function load() {
     if (!api) return;
@@ -22,7 +24,12 @@ export default function CodesPage() {
 
   // Grouper par type, dans l'ordre de TYPES, en respectant le filtre
   const groups = useMemo(() => {
-    const filtered = filterType ? codes.filter(c => c.type === filterType) : codes;
+    const filtered = codes.filter(c => {
+      if (filterType && c.type !== filterType) return false;
+      if (filterGlobal !== null && c.is_global !== filterGlobal) return false;
+      if (filterLocked !== null && c.is_locked !== filterLocked) return false;
+      return true;
+    });
     const map = {};
     filtered.forEach(c => {
       const key = c.type || 'Autre';
@@ -33,7 +40,7 @@ export default function CodesPage() {
     const knownOrder = TYPES.filter(t => map[t]);
     const unknown = Object.keys(map).filter(t => !TYPES.includes(t));
     return [...knownOrder, ...unknown].map(type => ({ type, items: map[type] }));
-  }, [codes, filterType]);
+  }, [codes, filterType, filterGlobal, filterLocked]);
 
   // Types présents dans les données (pour la combobox)
   const availableTypes = useMemo(() => {
@@ -45,7 +52,7 @@ export default function CodesPage() {
     <div className="page-wrapper">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 className="page-title">Codes de pointage</h1>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             value={filterType}
             onChange={e => setFilterType(e.target.value)}
@@ -54,6 +61,16 @@ export default function CodesPage() {
             <option value="">Tous les types</option>
             {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
+          <FilterToggle
+            label="Global"
+            value={filterGlobal}
+            onChange={setFilterGlobal}
+          />
+          <FilterToggle
+            label="Verrouillé"
+            value={filterLocked}
+            onChange={setFilterLocked}
+          />
           <button className="btn btn-primary" onClick={() => { setEditCode(null); setShowModal(true); }}>+ Nouveau code</button>
         </div>
       </div>
@@ -98,6 +115,33 @@ export default function CodesPage() {
         />
       )}
     </div>
+  );
+}
+
+function FilterToggle({ label, value, onChange }) {
+  const states = [
+    { val: null, text: `${label} : tous` },
+    { val: true, text: `${label} : oui` },
+    { val: false, text: `${label} : non` },
+  ];
+  const current = states.find(s => s.val === value) || states[0];
+  function cycle() {
+    const idx = states.findIndex(s => s.val === value);
+    onChange(states[(idx + 1) % states.length].val);
+  }
+  return (
+    <button
+      className="btn btn-sm"
+      onClick={cycle}
+      style={{
+        fontVariantNumeric: 'tabular-nums',
+        background: value !== null ? 'var(--accent)' : undefined,
+        color: value !== null ? '#fff' : undefined,
+        borderColor: value !== null ? 'var(--accent)' : undefined,
+      }}
+    >
+      {current.text}
+    </button>
   );
 }
 
