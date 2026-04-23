@@ -245,7 +245,7 @@ export default function PointageMatrixPage() {
           <button className={`toggle-btn ${mode === 'theorique' ? 'active' : ''}`} onClick={() => setMode('theorique')}>Théorique</button>
         </div>
 
-        <button className="btn btn-sm" onClick={handleExport} style={{ marginLeft: 'auto' }}>
+        <button className="btn btn-sm" onClick={handleExport}>
           ↓ Export Excel
         </button>
         <button className="btn btn-sm" onClick={loadMatrix}>↺ Rafraîchir</button>

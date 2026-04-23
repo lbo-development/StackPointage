@@ -82,6 +82,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* iOS Safari : s'ajuste quand le chrome du navigateur apparaît */
 }
 
 .app-header {
@@ -845,9 +846,18 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
   margin-bottom: 28px;
 }
 
+/* ============ TABLETTE ============ */
+@media (max-width: 1280px) {
+  .toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .toolbar::-webkit-scrollbar { display: none; }
+}
+
 /* ============ MOBILE ============ */
 @media (max-width: 768px) {
   .sidebar { display: none; }
-  .toolbar { overflow-x: auto; }
   .matrix-container { font-size: 10px; }
 }

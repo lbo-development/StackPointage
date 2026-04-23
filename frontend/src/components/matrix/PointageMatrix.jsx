@@ -33,8 +33,12 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
   const [drag, setDrag]           = useState(null);
   const [selection, setSelection] = useState(null);
 
-  const leftBodyRef   = useRef(null);
-  const rightPanelRef = useRef(null);
+  const leftBodyRef    = useRef(null);
+  const rightPanelRef  = useRef(null);
+  const longPressTimer  = useRef(null);
+  const touchStartPos   = useRef(null);
+  const touchDragStart  = useRef(null);
+  const dragRef         = useRef(null);
 
   function handleRightScroll() {
     if (leftBodyRef.current && rightPanelRef.current) {
@@ -42,15 +46,24 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
     }
   }
 
+  useEffect(() => { dragRef.current = drag; }, [drag]);
+
   useEffect(() => {
     function handleMouseUp() {
-      if (!drag) return;
-      setSelection(normalizeRange(drag));
+      if (!dragRef.current) return;
+      setSelection(normalizeRange(dragRef.current));
       setDrag(null);
     }
+    function preventScrollDuringDrag(e) {
+      if (dragRef.current) e.preventDefault();
+    }
     document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, [drag]);
+    document.addEventListener('touchmove', preventScrollDuringDrag, { passive: false });
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', preventScrollDuringDrag);
+    };
+  }, []);
 
   const monthGroups = useMemo(() => {
     const groups = [];
@@ -118,6 +131,57 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
     const s = normalizeRange(drag) || selection;
     if (!s || s.agentId !== agentId) return false;
     return dateStr >= s.startDate && dateStr <= s.endDate;
+  }
+
+  function startLongPress(ag, dateStr, isLocked, e) {
+    if (!canEdit || isLocked) return;
+    const touch = e.touches[0];
+    touchStartPos.current  = { x: touch.clientX, y: touch.clientY };
+    touchDragStart.current = { ag, dateStr };
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null;
+      touchDragStart.current = null;
+      handleContextMenu({ preventDefault: () => {} }, ag, dateStr, isLocked);
+    }, 600);
+  }
+
+  function cancelLongPress() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
+
+  function handleTouchMove(e) {
+    if (!touchStartPos.current) return;
+    const t = e.touches[0];
+    const dx = Math.abs(t.clientX - touchStartPos.current.x);
+    const dy = Math.abs(t.clientY - touchStartPos.current.y);
+    if (dx <= 10 && dy <= 10) return;
+
+    cancelLongPress();
+    const start = touchDragStart.current;
+    if (!start) return;
+
+    if (!dragRef.current) {
+      setSelection(null);
+      setDrag({ agentId: start.ag.agent.id, startDate: start.dateStr, endDate: start.dateStr });
+    }
+
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    const cell = el?.closest('td[data-date]');
+    if (cell && cell.dataset.agentid === String(start.ag.agent.id)) {
+      setDrag(prev => prev ? { ...prev, endDate: cell.dataset.date } : null);
+    }
+  }
+
+  function handleTouchEnd() {
+    cancelLongPress();
+    touchDragStart.current = null;
+    if (dragRef.current) {
+      setSelection(normalizeRange(dragRef.current));
+      setDrag(null);
+    }
   }
 
   function handleContextMenu(e, ag, dateStr, isLocked) {
@@ -313,7 +377,12 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
                   setDrag(prev => ({ ...prev, endDate: dateStr }));
                 }
               }}
+              data-date={dateStr}
+              data-agentid={String(agent.id)}
               onContextMenu={e => handleContextMenu(e, ag, dateStr, isLocked)}
+              onTouchStart={e => startLongPress(ag, dateStr, isLocked, e)}
+              onTouchEnd={handleTouchEnd}
+              onTouchMove={handleTouchMove}
             >
               <span className="code-text">
                 {entry?.code || (isFerie ? 'F' : '')}
