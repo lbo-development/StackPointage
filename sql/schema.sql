@@ -29,6 +29,7 @@ CREATE TABLE services (
   nom TEXT NOT NULL,
   code TEXT NOT NULL UNIQUE,
   description TEXT,
+  num_ordre INT NOT NULL DEFAULT 0,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -71,7 +72,7 @@ CREATE TABLE specialites (
 -- ============================================================
 CREATE TABLE roulements (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  service_id UUID REFERENCES services(id) ON DELETE SET NULL,
   nom TEXT NOT NULL,
   description TEXT,
   longueur_cycle INT NOT NULL CHECK (longueur_cycle > 0),
@@ -107,6 +108,8 @@ CREATE TABLE agents (
   telephone TEXT,
   date_naissance DATE,
   date_embauche DATE,
+  type_contrat TEXT CHECK (type_contrat IN ('CDI', 'CDD', 'CFA', 'INTERIM')),
+  photo_url TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

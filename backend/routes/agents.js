@@ -18,12 +18,12 @@ router.get('/', requireServiceScope, async (req, res) => {
         cellules(nom, code, couleur),
         specialites(nom, code, couleur),
         roulements(nom)
-      `)
-      .eq('is_active', true);
+      `);
 
     if (serviceId) query = query.eq('service_id', serviceId);
+    if (!req.query.include_inactive) query = query.eq('is_active', true);
 
-    // Tri : cellule → ordre dans la cellule → nom alphabétique (fallback)
+    // Tri : cellule_id stable, ordre affiné côté frontend par cellules.ordre
     const { data, error } = await query
       .order('cellule_id')
       .order('ordre', { ascending: true })
@@ -50,19 +50,40 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/agents — créer agent + affectation initiale
+// POST /api/agents — créer agent + affectation (upsert par matricule)
 router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => {
   try {
-    const { nom, prenom, matricule, email, telephone, date_embauche, assignment } = req.body;
-    const { data: agent, error } = await supabase
+    const { nom, prenom, matricule, email, telephone, date_embauche, type_contrat, assignment } = req.body;
+
+    // Rechercher un agent existant avec ce matricule
+    const { data: existing } = await supabase
       .from('agents')
-      .insert({ nom, prenom, matricule, email, telephone, date_embauche })
-      .select()
-      .single();
-    if (error) throw error;
+      .select('id')
+      .eq('matricule', matricule)
+      .maybeSingle();
+
+    let agent;
+    if (existing) {
+      // Mettre à jour les infos de l'agent existant et réutiliser son id
+      const { data: updated, error: errU } = await supabase
+        .from('agents')
+        .update({ nom, prenom, email, telephone, type_contrat })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      if (errU) throw errU;
+      agent = updated;
+    } else {
+      const { data: created, error: errC } = await supabase
+        .from('agents')
+        .insert({ nom, prenom, matricule, email, telephone, date_embauche, type_contrat })
+        .select()
+        .single();
+      if (errC) throw errC;
+      agent = created;
+    }
 
     if (assignment) {
-      // Calculer le prochain ordre disponible dans cette cellule
       const { data: existingInCellule } = await supabase
         .from('agent_assignments')
         .select('ordre')
@@ -90,13 +111,37 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
   }
 });
 
+// PUT /api/agents/assignments/:id — modifier une affectation
+router.put('/assignments/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
+  try {
+    const { cellule_id, specialite_id, roulement_id, date_debut, date_fin, is_active } = req.body;
+    const { data, error } = await supabase
+      .from('agent_assignments')
+      .update({
+        cellule_id,
+        specialite_id: specialite_id || null,
+        roulement_id: roulement_id || null,
+        date_debut,
+        date_fin: date_fin || null,
+        is_active: is_active !== undefined ? is_active : true,
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PUT /api/agents/:id — modifier les infos de l'agent
 router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
   try {
-    const { nom, prenom, matricule, email, telephone, date_embauche } = req.body;
+    const { nom, prenom, matricule, email, telephone, date_embauche, type_contrat } = req.body;
     const { data, error } = await supabase
       .from('agents')
-      .update({ nom, prenom, matricule, email, telephone, date_embauche })
+      .update({ nom, prenom, matricule, email, telephone, date_embauche, type_contrat })
       .eq('id', req.params.id)
       .select()
       .single();
@@ -138,6 +183,53 @@ router.post('/:id/assignments', requireRole('admin_app', 'admin_service'), async
       .single();
     if (error) throw error;
     res.status(201).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/agents/:id/photo — upload photo d'identité (base64 JSON)
+router.post('/:id/photo', requireRole('admin_app', 'admin_service'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: base64, mimeType } = req.body;
+    if (!base64 || !mimeType) return res.status(400).json({ error: 'data et mimeType requis' });
+
+    const buffer = Buffer.from(base64, 'base64');
+    const storagePath = `photo/${id}`;
+
+    const { error: upErr } = await supabase.storage
+      .from('Documents')
+      .upload(storagePath, buffer, { contentType: mimeType, upsert: true });
+    if (upErr) throw new Error(`Storage upload: ${upErr.message}`);
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('Documents')
+      .getPublicUrl(storagePath);
+
+    const { error: dbErr } = await supabase
+      .from('agents')
+      .update({ photo_url: publicUrl })
+      .eq('id', id);
+    if (dbErr) throw new Error(`DB update: ${dbErr.message}`);
+
+    res.json({ photo_url: publicUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/agents/:id/photo — supprimer la photo
+router.delete('/:id/photo', requireRole('admin_app', 'admin_service'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error: stErr } = await supabase.storage
+      .from('Documents')
+      .remove([`photo/${id}`]);
+    if (stErr) throw stErr;
+
+    await supabase.from('agents').update({ photo_url: null }).eq('id', id);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -6,6 +6,9 @@ import PointageMatrixPage from './pages/PointageMatrixPage.jsx';
 import AgentsPage from './pages/AgentsPage.jsx';
 import RoulementsPage from './pages/RoulementsPage.jsx';
 import CodesPage from './pages/CodesPage.jsx';
+import SpecialitesPage from './pages/SpecialitesPage.jsx';
+import ServicesPage from './pages/ServicesPage.jsx';
+import ProfilesPage from './pages/ProfilesPage.jsx';
 import ConvocationsPage from './pages/ConvocationsPage.jsx';
 import PrevisionsPage from './pages/PrevisionsPage.jsx';
 import MonEspacePage from './pages/MonEspacePage.jsx';
@@ -48,6 +51,21 @@ export default function App() {
             <Route path="codes" element={
               <RoleRoute roles={['admin_app','admin_service']}>
                 <CodesPage />
+              </RoleRoute>
+            } />
+            <Route path="specialites" element={
+              <RoleRoute roles={['admin_app','admin_service']}>
+                <SpecialitesPage />
+              </RoleRoute>
+            } />
+            <Route path="services" element={
+              <RoleRoute roles={['admin_app','admin_service']}>
+                <ServicesPage />
+              </RoleRoute>
+            } />
+            <Route path="profils" element={
+              <RoleRoute roles={['admin_app']}>
+                <ProfilesPage />
               </RoleRoute>
             } />
             <Route path="convocations" element={<ConvocationsPage />} />

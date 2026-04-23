@@ -11,13 +11,30 @@ function getDayInfo(dateStr, feriesSet) {
     isWeekend: dow === 0 || dow === 6,
     isFerie: feriesSet.has(dateStr),
     isToday: dateStr === TODAY,
-    label: d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'numeric' })
+    weekday: d.toLocaleDateString('fr-FR', { weekday: 'short' }),
+    day: d.getDate(),
+    month: d.toLocaleDateString('fr-FR', { month: 'short' }),
   };
 }
 
 export default function PointageMatrix({ data, mode, canEdit, onCellClick, onCellContextMenu }) {
   const { dates, cellules, specialites, agents, cumuls, feries, codesMap } = data;
   const feriesSet = useMemo(() => new Set(feries || []), [feries]);
+
+  const monthGroups = useMemo(() => {
+    const groups = [];
+    let cur = null;
+    dates.forEach(d => {
+      const [y, m] = d.split('-');
+      const key = `${y}-${m}`;
+      if (!cur || cur.key !== key) {
+        cur = { key, label: new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }), count: 0 };
+        groups.push(cur);
+      }
+      cur.count++;
+    });
+    return groups;
+  }, [dates]);
 
   // Grouper agents par cellule → spécialité
   // Tri : ordre (champ agent_assignments.ordre) puis nom en fallback
@@ -89,24 +106,53 @@ export default function PointageMatrix({ data, mode, canEdit, onCellClick, onCel
       <div className="matrix-container">
         <table className="matrix-table">
           <thead>
+            {/* Ligne 1 : nom du mois en pleine largeur */}
             <tr>
-              {/* Colonnes fixes */}
-              <th className="col-sticky" style={{ minWidth: 70 }}>Cellule</th>
-              <th className="col-sticky col-sticky-2" style={{ minWidth: 90 }}>Nom</th>
-              <th className="col-sticky col-sticky-3" style={{ minWidth: 70 }}>Prénom</th>
-              <th className="col-sticky col-sticky-4" style={{ minWidth: 70, fontFamily: 'var(--font-mono)', fontSize: 10 }}>Matricule</th>
+              <th colSpan={4} className="col-sticky" style={{ zIndex: 5, height: 24, padding: '3px 8px', textAlign: 'left', top: 0 }} />
+              {monthGroups.map(g => (
+                <th key={g.key} colSpan={g.count} style={{
+                  top: 0,
+                  height: 24,
+                  textAlign: 'center',
+                  borderLeft: '2px solid var(--border-light)',
+                  padding: '3px 6px',
+                  fontSize: 11,
+                  fontFamily: 'var(--font-ui)',
+                  textTransform: 'capitalize',
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  zIndex: 3,
+                }}>
+                  {g.label}
+                </th>
+              ))}
+            </tr>
 
-              {/* Dates */}
+            {/* Ligne 2 : colonnes fixes + dates sur 3 lignes */}
+            <tr>
+              <th className="col-sticky" style={{ minWidth: 70, top: 24, zIndex: 5 }}>Cellule</th>
+              <th className="col-sticky col-sticky-2" style={{ minWidth: 90, top: 24, zIndex: 5 }}>Nom</th>
+              <th className="col-sticky col-sticky-3" style={{ minWidth: 70, top: 24, zIndex: 5 }}>Prénom</th>
+              <th className="col-sticky col-sticky-4" style={{ minWidth: 70, fontFamily: 'var(--font-mono)', fontSize: 10, top: 24, zIndex: 5 }}>Matricule</th>
+
               {dates.map(dateStr => {
-                const { isSam, isDim, isFerie, isToday, label } = getDayInfo(dateStr, feriesSet);
+                const { isSam, isDim, isFerie, isToday, weekday, day, month } = getDayInfo(dateStr, feriesSet);
                 let cls = 'date-header';
                 if (isFerie) cls += ' ferie';
                 else if (isDim) cls += ' dimanche';
                 else if (isSam) cls += ' weekend';
                 if (isToday) cls += ' today';
+                const isFirst = new Date(dateStr + 'T00:00:00').getDate() === 1;
                 return (
-                  <th key={dateStr} className={cls} title={dateStr}>
-                    {label}
+                  <th key={dateStr} className={cls} title={dateStr} style={{
+                    top: 24,
+                    ...(isFirst ? { borderLeft: '2px solid var(--border-light)' } : {}),
+                  }}>
+                    <div style={{ lineHeight: 1.2 }}>
+                      <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{weekday}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>{day}</div>
+                      <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{month}</div>
+                    </div>
                   </th>
                 );
               })}

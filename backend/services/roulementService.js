@@ -67,6 +67,7 @@ export async function genererTheorique(agentId, dateDebut, dateFin) {
 /**
  * Récupère tous les roulements d'un service avec leurs cycles
  */
+// Retourne les roulements du service + les roulements globaux (service_id IS NULL)
 export async function getRoulementsByService(serviceId) {
   const { data, error } = await supabase
     .from('roulements')
@@ -74,7 +75,7 @@ export async function getRoulementsByService(serviceId) {
       *,
       roulement_cycles(*)
     `)
-    .eq('service_id', serviceId)
+    .or(`service_id.eq.${serviceId},service_id.is.null`)
     .eq('is_active', true)
     .order('nom');
 

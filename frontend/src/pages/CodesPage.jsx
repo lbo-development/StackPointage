@@ -1,7 +1,9 @@
 // ============ CodesPage.jsx ============
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+
+const TYPES = ['Présence','Repos','Congé','Maladie','absence','Autre absence','Autre présence','Autre'];
 
 export default function CodesPage() {
   const { api } = useAuth();
@@ -9,6 +11,7 @@ export default function CodesPage() {
   const [codes, setCodes] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editCode, setEditCode] = useState(null);
+  const [filterType, setFilterType] = useState('');
 
   function load() {
     if (!api) return;
@@ -17,24 +20,73 @@ export default function CodesPage() {
 
   useEffect(load, [api, selectedService]);
 
+  // Grouper par type, dans l'ordre de TYPES, en respectant le filtre
+  const groups = useMemo(() => {
+    const filtered = filterType ? codes.filter(c => c.type === filterType) : codes;
+    const map = {};
+    filtered.forEach(c => {
+      const key = c.type || 'Autre';
+      if (!map[key]) map[key] = [];
+      map[key].push(c);
+    });
+    // Trier les groupes selon l'ordre de TYPES, puis les types inconnus à la fin
+    const knownOrder = TYPES.filter(t => map[t]);
+    const unknown = Object.keys(map).filter(t => !TYPES.includes(t));
+    return [...knownOrder, ...unknown].map(type => ({ type, items: map[type] }));
+  }, [codes, filterType]);
+
+  // Types présents dans les données (pour la combobox)
+  const availableTypes = useMemo(() => {
+    const set = new Set(codes.map(c => c.type).filter(Boolean));
+    return TYPES.filter(t => set.has(t));
+  }, [codes]);
+
   return (
     <div className="page-wrapper">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 className="page-title">Codes de pointage</h1>
-        <button className="btn btn-primary" onClick={() => { setEditCode(null); setShowModal(true); }}>+ Nouveau code</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select
+            value={filterType}
+            onChange={e => setFilterType(e.target.value)}
+            style={{ minWidth: 160 }}
+          >
+            <option value="">Tous les types</option>
+            {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <button className="btn btn-primary" onClick={() => { setEditCode(null); setShowModal(true); }}>+ Nouveau code</button>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {codes.map(c => (
-          <div key={c.id}
-            style={{ background: c.bg_color, color: c.text_color, borderRadius: 6, padding: '10px 14px', minWidth: 120, border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}
-            onClick={() => { setEditCode(c); setShowModal(true); }}
-          >
-            <div style={{ fontWeight: 800, fontSize: 18, fontFamily: 'var(--font-mono)' }}>{c.code}</div>
-            <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>{c.libelle}</div>
-            <div style={{ fontSize: 10, opacity: 0.6, marginTop: 4 }}>{c.type}</div>
-            {c.is_locked && <div style={{ fontSize: 9, marginTop: 4 }}>🔒 Verrouillé</div>}
-            {c.is_global && <div style={{ fontSize: 9, opacity: 0.6 }}>Global</div>}
+      {groups.length === 0 && (
+        <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>
+          Aucun code de pointage défini
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {groups.map(({ type, items }) => (
+          <div key={type}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '0.08em', color: 'var(--text-muted)',
+              borderBottom: '1px solid var(--border)', paddingBottom: 6, marginBottom: 10
+            }}>
+              {type} <span style={{ fontWeight: 400, opacity: 0.6 }}>({items.length})</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {items.map(c => (
+                <div key={c.id}
+                  style={{ background: c.bg_color, color: c.text_color, borderRadius: 6, padding: '10px 14px', minWidth: 120, border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}
+                  onClick={() => { setEditCode(c); setShowModal(true); }}
+                >
+                  <div style={{ fontWeight: 800, fontSize: 18, fontFamily: 'var(--font-mono)' }}>{c.code}</div>
+                  <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>{c.libelle}</div>
+                  {c.is_locked && <div style={{ fontSize: 9, marginTop: 4 }}>🔒 Verrouillé</div>}
+                  {c.is_global && <div style={{ fontSize: 9, opacity: 0.6 }}>Global</div>}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
@@ -52,7 +104,7 @@ export default function CodesPage() {
 function CodeModal({ code, serviceId, api, onClose, onSaved }) {
   const [form, setForm] = useState({
     code: code?.code || '', libelle: code?.libelle || '',
-    type: code?.type || 'journee', bg_color: code?.bg_color || '#FFFFFF',
+    type: code?.type || 'Présence', bg_color: code?.bg_color || '#FFFFFF',
     text_color: code?.text_color || '#000000', is_locked: code?.is_locked || false,
     is_global: code?.is_global || false, ordre: code?.ordre || 0
   });
@@ -72,7 +124,6 @@ function CodeModal({ code, serviceId, api, onClose, onSaved }) {
     finally { setSaving(false); }
   }
 
-  const TYPES = ['matin','apres_midi','nuit','journee','absence','conge','repos','autre'];
 
   return (
     <div className="modal-overlay" onClick={onClose}>

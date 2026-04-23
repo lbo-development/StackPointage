@@ -11,6 +11,7 @@ import codesRoutes from "./routes/codes.js";
 import convocationsRoutes from "./routes/convocations.js";
 import previsionsRoutes from "./routes/previsions.js";
 import exportRoutes from "./routes/export.js";
+import profilesRoutes from "./routes/profiles.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,6 +30,7 @@ app.use("/api/codes", codesRoutes);
 app.use("/api/convocations", convocationsRoutes);
 app.use("/api/previsions", previsionsRoutes);
 app.use("/api/export", exportRoutes);
+app.use("/api/profiles", profilesRoutes);
 
 app.get("/api/health", (req, res) =>
   res.json({ status: "ok", timestamp: new Date() }),

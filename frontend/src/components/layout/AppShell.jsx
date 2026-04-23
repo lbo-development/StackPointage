@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 
@@ -19,6 +19,9 @@ export default function AppShell() {
   const [selectedService, setSelectedService] = useState(null);
   const [selectedCellule, setSelectedCellule] = useState(null);
   const [expandedServices, setExpandedServices] = useState({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef(null);
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
 
   useEffect(() => {
     if (!api) return;
@@ -39,17 +42,42 @@ export default function AppShell() {
 
   const navItems = [
     { path: '/matrice', label: 'Matrice', icon: '▦', show: true },
-    { path: '/agents', label: 'Agents', icon: '◈', show: !isAgent },
-    { path: '/roulements', label: 'Roulements', icon: '↻', show: isAdmin || isAdminService },
-    { path: '/codes', label: 'Codes', icon: '◉', show: isAdmin || isAdminService },
     { path: '/convocations', label: 'Convocations', icon: '✉', show: !isAgent },
     { path: '/previsions', label: 'Prévisions', icon: '◷', show: !isAgent },
     { path: '/mon-espace', label: 'Mon Espace', icon: '◎', show: true }
   ].filter(n => n.show);
 
+  const settingsItems = [
+    { path: '/agents', label: 'Agents', icon: '◈', show: !isAgent },
+    { path: '/roulements', label: 'Roulements', icon: '↻', show: isAdmin || isAdminService },
+    { path: '/codes', label: 'Codes', icon: '◉', show: isAdmin || isAdminService },
+    { path: '/specialites', label: 'Spécialités', icon: '◆', show: isAdmin || isAdminService },
+    { path: '/services', label: 'Services', icon: '⊞', show: isAdmin || isAdminService },
+    { path: '/profils', label: 'Profils', icon: '⊙', show: isAdmin },
+  ].filter(n => n.show);
+
   function toggleService(serviceId) {
     setExpandedServices(prev => ({ ...prev, [serviceId]: !prev[serviceId] }));
   }
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  }
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (settingsRef.current && !settingsRef.current.contains(e.target)) {
+        setSettingsOpen(false);
+      }
+    }
+    if (settingsOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [settingsOpen]);
 
   // Partage de l'état service/cellule sélectionné avec les pages enfants via context ou state
   // Pour simplifier, on passe via URL params ou via un context dédié
@@ -100,36 +128,75 @@ export default function AppShell() {
       <div className="app-body">
         {/* SIDEBAR - Arborescence Services/Cellules */}
         <aside className="sidebar">
-          <div className="sidebar-section">
-            <div className="sidebar-section-header">Services</div>
-            {services.map(svc => (
-              <div key={svc.id}>
-                <div
-                  className={`tree-item ${selectedService?.id === svc.id ? 'active' : ''}`}
-                  onClick={() => {
-                    setSelectedService(svc);
-                    setSelectedCellule(null);
-                    toggleService(svc.id);
-                  }}
-                >
-                  <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
-                    {expandedServices[svc.id] ? '▾' : '▸'}
-                  </span>
-                  <span style={{ flex: 1 }}>{svc.nom}</span>
-                  <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{svc.code}</span>
-                </div>
+          <div className="sidebar-scrollable">
+            <div className="sidebar-section">
+              <div className="sidebar-section-header">Services</div>
+              {services.map(svc => (
+                <div key={svc.id}>
+                  <div
+                    className={`tree-item ${selectedService?.id === svc.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedService(svc);
+                      setSelectedCellule(null);
+                      toggleService(svc.id);
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+                      {expandedServices[svc.id] ? '▾' : '▸'}
+                    </span>
+                    <span style={{ flex: 1 }}>{svc.nom}</span>
+                    {svc.nb_agents > 0 && <span className="badge badge-count">{svc.nb_agents}</span>}
+                    <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{svc.code}</span>
+                  </div>
 
-                {expandedServices[svc.id] && (
-                  <CellulesTree
-                    serviceId={svc.id}
-                    api={api}
-                    selectedCellule={selectedCellule}
-                    onSelect={(c) => { setSelectedCellule(c); setSelectedService(svc); }}
-                  />
-                )}
-              </div>
-            ))}
+                  {expandedServices[svc.id] && (
+                    <CellulesTree
+                      serviceId={svc.id}
+                      api={api}
+                      selectedCellule={selectedCellule}
+                      onSelect={(c) => { setSelectedCellule(c); setSelectedService(svc); }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
+
+          {settingsItems.length > 0 && (
+            <div className="sidebar-footer" ref={settingsRef}>
+              {settingsOpen && (
+                <div className="settings-dropdown">
+                  {settingsItems.map(item => (
+                    <button
+                      key={item.path}
+                      className={`settings-dropdown-item ${location.pathname === item.path ? 'active' : ''}`}
+                      onClick={() => { navigate(item.path); setSettingsOpen(false); }}
+                    >
+                      <span className="settings-dropdown-icon">{item.icon}</span>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="sidebar-footer-row">
+                <button
+                  className={`sidebar-settings-btn ${settingsOpen ? 'open' : ''}`}
+                  onClick={() => setSettingsOpen(prev => !prev)}
+                  title="Paramètres"
+                >
+                  <span className="settings-gear">⚙</span>
+                  <span>Paramètres</span>
+                </button>
+                <button
+                  className="sidebar-theme-btn"
+                  onClick={toggleTheme}
+                  title={theme === 'dark' ? 'Passer en mode jour' : 'Passer en mode nuit'}
+                >
+                  {theme === 'dark' ? '☀' : '☾'}
+                </button>
+              </div>
+            </div>
+          )}
         </aside>
 
         {/* CONTENU PRINCIPAL */}
@@ -158,7 +225,8 @@ function CellulesTree({ serviceId, api, selectedCellule, onSelect }) {
           onClick={() => onSelect(c)}
         >
           <span className="dot" style={{ background: c.couleur }} />
-          {c.nom}
+          <span style={{ flex: 1 }}>{c.nom}</span>
+          {c.nb_agents > 0 && <span className="badge badge-count">{c.nb_agents}</span>}
         </div>
       ))}
     </>
