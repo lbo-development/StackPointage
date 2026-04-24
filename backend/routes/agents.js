@@ -35,6 +35,37 @@ router.get('/', requireServiceScope, async (req, res) => {
   }
 });
 
+// GET /api/agents/sans-affectation?service_id=... — agents sans affectation active dans ce service
+router.get('/sans-affectation', requireServiceScope, async (req, res) => {
+  try {
+    const serviceId = req.query.service_id || req.scopedServiceId;
+    if (!serviceId) return res.json([]);
+
+    const { data: assigned } = await supabase
+      .from('agent_assignments')
+      .select('agent_id')
+      .eq('is_active', true);
+
+    const assignedIds = (assigned || []).map(a => a.agent_id);
+
+    let query = supabase
+      .from('agents')
+      .select('id, matricule, nom, prenom, email, telephone, type_contrat, photo_url')
+      .eq('is_active', true)
+      .order('nom');
+
+    if (assignedIds.length > 0) {
+      query = query.not('id', 'in', `(${assignedIds.join(',')})`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/agents/:id
 router.get('/:id', async (req, res) => {
   try {
@@ -100,7 +131,8 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
         agent_id: agent.id,
         ...assignment,
         ordre: assignment.ordre ?? nextOrdre,
-        is_active: true
+        is_active: true,
+        date_debut_reference: assignment.date_debut_reference || null,
       });
       if (errA) throw errA;
     }
@@ -114,7 +146,7 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
 // PUT /api/agents/assignments/:id — modifier une affectation
 router.put('/assignments/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
   try {
-    const { cellule_id, specialite_id, roulement_id, date_debut, date_fin, is_active } = req.body;
+    const { cellule_id, specialite_id, roulement_id, date_debut, date_fin, is_active, date_debut_reference } = req.body;
     const { data, error } = await supabase
       .from('agent_assignments')
       .update({
@@ -124,6 +156,7 @@ router.put('/assignments/:id', requireRole('admin_app', 'admin_service'), async 
         date_debut,
         date_fin: date_fin || null,
         is_active: is_active !== undefined ? is_active : true,
+        date_debut_reference: date_debut_reference || null,
       })
       .eq('id', req.params.id)
       .select()
@@ -155,7 +188,7 @@ router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) =
 // POST /api/agents/:id/assignments — créer une affectation
 router.post('/:id/assignments', requireRole('admin_app', 'admin_service'), async (req, res) => {
   try {
-    const { service_id, cellule_id, specialite_id, roulement_id, date_debut, date_fin, ordre } = req.body;
+    const { service_id, cellule_id, specialite_id, roulement_id, date_debut, date_fin, ordre, date_debut_reference } = req.body;
 
     // Auto-calcul de l'ordre si non fourni
     let finalOrdre = ordre;
@@ -177,7 +210,8 @@ router.post('/:id/assignments', requireRole('admin_app', 'admin_service'), async
         service_id, cellule_id, specialite_id, roulement_id,
         date_debut, date_fin,
         ordre: finalOrdre,
-        is_active: true
+        is_active: true,
+        date_debut_reference: date_debut_reference || null,
       })
       .select()
       .single();

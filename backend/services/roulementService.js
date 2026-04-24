@@ -10,9 +10,9 @@ import { supabase } from '../supabase.js';
  * 
  * Le double modulo gère les dates antérieures à la référence (delta négatif)
  */
-export function calculerCodeRoulement(dateStr, roulement, cycles) {
-  const dateRef = new Date(roulement.date_debut_reference);
-  const dateCible = new Date(dateStr);
+export function calculerCodeRoulement(dateStr, roulement, cycles, dateRefOverride = null) {
+  const dateRef = new Date((dateRefOverride || roulement.date_debut_reference) + 'T00:00:00');
+  const dateCible = new Date(dateStr + 'T00:00:00');
 
   // Différence en jours (UTC pour éviter les décalages DST)
   const msParJour = 24 * 60 * 60 * 1000;
@@ -50,6 +50,7 @@ export async function genererTheorique(agentId, dateDebut, dateFin) {
   if (errC || !cycles?.length) return {};
 
   const roulement = assignment.roulements;
+  const dateRefOverride = assignment.date_debut_reference || null;
   const result = {};
 
   let current = new Date(dateDebut);
@@ -57,7 +58,7 @@ export async function genererTheorique(agentId, dateDebut, dateFin) {
 
   while (current <= end) {
     const dateStr = current.toISOString().split('T')[0];
-    result[dateStr] = calculerCodeRoulement(dateStr, roulement, cycles);
+    result[dateStr] = calculerCodeRoulement(dateStr, roulement, cycles, dateRefOverride);
     current.setDate(current.getDate() + 1);
   }
 

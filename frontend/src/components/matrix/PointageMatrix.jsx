@@ -32,6 +32,7 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
 
   const [drag, setDrag]           = useState(null);
   const [selection, setSelection] = useState(null);
+  const [statsModal, setStatsModal] = useState(null); // { cellule }
 
   const leftBodyRef    = useRef(null);
   const rightPanelRef  = useRef(null);
@@ -224,8 +225,26 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
           <div style={{ width: COL_W.indicator, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: row.cellule.couleur }} />
           </div>
-          <div style={{ flex: 1, fontWeight: 700, fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', overflow: 'hidden', whiteSpace: 'nowrap', paddingRight: 6 }}>
-            {row.cellule.nom}
+          <div style={{ flex: 1, fontWeight: 700, fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', overflow: 'hidden', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, paddingRight: 4 }}>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.cellule.nom}</span>
+            <button
+              title="Statistiques de la cellule"
+              onClick={e => { e.stopPropagation(); setStatsModal(row.cellule); }}
+              style={{
+                flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer',
+                padding: '1px 3px', borderRadius: 3, color: '#8dc63f',
+                display: 'flex', alignItems: 'center',
+                lineHeight: 1, opacity: 0.75,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'rgba(141,198,63,0.12)'; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '0.75'; e.currentTarget.style.background = 'none'; }}
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor">
+                <rect x="0" y="7" width="3" height="6" rx="1" />
+                <rect x="5" y="4" width="3" height="9" rx="1" />
+                <rect x="10" y="1" width="3" height="12" rx="1" />
+              </svg>
+            </button>
           </div>
         </div>
       );
@@ -396,7 +415,7 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
   }
 
   // ─── Rendu ─────────────────────────────────────────────────────────────────
-  return (
+  return (<>
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden', userSelect: drag ? 'none' : undefined }}>
 
       {/* ══════════════ PANNEAU GAUCHE FIGÉ ══════════════ */}
@@ -483,6 +502,136 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
         </table>
       </div>
 
+    </div>
+
+    {statsModal && (
+      <StatsModal
+        cellule={statsModal}
+        agents={agents}
+        dates={dates}
+        codesMap={codesMap}
+        onClose={() => setStatsModal(null)}
+      />
+    )}
+  </>);
+}
+
+// ─── Modale statistiques d'une cellule ─────────────────────────────────────────
+function StatsModal({ cellule, agents, dates, codesMap, onClose }) {
+  const celluleAgents = agents.filter(ag => ag.cellule_id === cellule.id);
+  const nbAgents = celluleAgents.length;
+
+  // Comptage des codes et cumuls par type
+  const codeCounts = {};
+  let totalEntries = 0;
+  const typeCounts = { matin: 0, apres_midi: 0, nuit: 0, journee: 0, autre: 0 };
+
+  celluleAgents.forEach(ag => {
+    dates.forEach(date => {
+      const entry = ag.reel[date] || ag.theorique[date];
+      if (!entry?.code) return;
+      codeCounts[entry.code] = (codeCounts[entry.code] || 0) + 1;
+      totalEntries++;
+      const codeType = codesMap[entry.code]?.type;
+      if (codeType && typeCounts[codeType] !== undefined) typeCounts[codeType]++;
+      else typeCounts.autre++;
+    });
+  });
+
+  const topCodes = Object.entries(codeCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const maxCodeCount = topCodes[0]?.[1] || 1;
+
+  const typeConfig = [
+    { key: 'matin',      label: 'Matin',       color: '#f59e0b' },
+    { key: 'apres_midi', label: 'Après-midi',   color: '#3b82f6' },
+    { key: 'nuit',       label: 'Nuit',         color: '#6366f1' },
+    { key: 'journee',    label: 'Journée',      color: '#10b981' },
+    { key: 'autre',      label: 'Autre / N/A',  color: '#94a3b8' },
+  ].filter(t => typeCounts[t.key] > 0);
+
+  const maxTypeCount = Math.max(...typeConfig.map(t => typeCounts[t.key]), 1);
+
+  const fmtDate = d => new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 500, width: '95vw' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: cellule.couleur, flexShrink: 0 }} />
+            Statistiques — {cellule.nom}
+          </span>
+          <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Résumé */}
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+            <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 18 }}>{nbAgents}</span>
+            <span> agent{nbAgents > 1 ? 's' : ''} &nbsp;·&nbsp; </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{fmtDate(dates[0])} → {fmtDate(dates[dates.length - 1])}</span>
+            <span> &nbsp;·&nbsp; </span>
+            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{totalEntries}</span>
+            <span> entrées</span>
+          </div>
+
+          {/* Répartition par type */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+              Répartition par type de poste
+            </div>
+            {typeConfig.length === 0 && (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun code sur cette période</div>
+            )}
+            {typeConfig.map(t => (
+              <div key={t.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                <div style={{ width: 74, fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0, textAlign: 'right' }}>{t.label}</div>
+                <div style={{ flex: 1, height: 14, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(typeCounts[t.key] / maxTypeCount) * 100}%`, background: t.color, borderRadius: 3, transition: 'width 0.3s' }} />
+                </div>
+                <div style={{ width: 32, fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right', flexShrink: 0 }}>{typeCounts[t.key]}</div>
+                <div style={{ width: 34, fontSize: 10, color: 'var(--text-muted)', textAlign: 'right', flexShrink: 0 }}>
+                  {totalEntries ? `${Math.round(typeCounts[t.key] / totalEntries * 100)}%` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Top codes */}
+          {topCodes.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                Codes les plus utilisés
+              </div>
+              {topCodes.map(([code, count]) => {
+                const info = codesMap[code];
+                return (
+                  <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                    <div style={{
+                      width: 32, height: 20, borderRadius: 3, flexShrink: 0,
+                      background: info?.bg_color || 'var(--bg-surface)',
+                      color: info?.text_color || 'var(--text-primary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)',
+                    }}>
+                      {code}
+                    </div>
+                    <div style={{ width: 110, fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flexShrink: 0 }}>
+                      {info?.libelle || '—'}
+                    </div>
+                    <div style={{ flex: 1, height: 10, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${(count / maxCodeCount) * 100}%`, background: info?.bg_color || 'var(--border)', borderRadius: 3 }} />
+                    </div>
+                    <div style={{ width: 32, fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right', flexShrink: 0 }}>{count}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+        </div>
+      </div>
     </div>
   );
 }

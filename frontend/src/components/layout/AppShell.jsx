@@ -56,6 +56,7 @@ export default function AppShell() {
     { path: '/specialites', label: 'Spécialités', icon: '◆', show: isAdmin || isAdminService },
     { path: '/services', label: 'Services', icon: '⊞', show: isAdmin || isAdminService },
     { path: '/profils', label: 'Profils', icon: '⊙', show: isAdmin },
+    { path: '/jours-feries', label: 'Jours Fériés', icon: '◷', show: isAdmin },
   ].filter(n => n.show);
 
   function toggleService(serviceId) {
@@ -121,7 +122,21 @@ export default function AppShell() {
     <div className="app-shell">
       {/* HEADER */}
       <header className="app-header">
-        <span className="logo">⬡ Pointage</span>
+        <span className="logo" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img src="/logo.png" alt="Digital Bonsaï" style={{ height: 40, width: 'auto' }} />
+          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, gap: 4 }}>
+            <span style={{
+              fontWeight: 700, letterSpacing: '-0.02em', fontSize: 20,
+              background: 'linear-gradient(135deg, #2d6e26 0%, #8dc63f 100%)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+            }}>
+              SIPRA
+            </span>
+            <span style={{ fontSize: 7.5, fontWeight: 600, letterSpacing: '0.08em', wordSpacing: '-0.15em', textTransform: 'uppercase', color: '#8dc63f' }}>
+              Suivi <span style={{ fontWeight: 800 }}>PR</span>ésence Absence
+            </span>
+          </span>
+        </span>
 
         <nav style={{ display: 'flex', gap: 2, flex: 1 }}>
           {navItems.map(item => (

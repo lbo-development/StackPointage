@@ -27,8 +27,19 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-logo">⬡ POINTAGE</div>
-        <div className="login-subtitle">Gestion des agents et roulements</div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <img src="/logo.png" alt="Digital Bonsaï" style={{ height: 90, width: 'auto' }} />
+          <div className="login-logo" style={{
+            background: 'linear-gradient(135deg, #2d6e26 0%, #8dc63f 100%)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+            fontWeight: 700, letterSpacing: '-0.02em',
+          }}>
+            SIPRA
+          </div>
+          <div className="login-subtitle" style={{ color: '#8dc63f', letterSpacing: '0.08em', wordSpacing: '-0.15em', textTransform: 'uppercase', fontWeight: 600 }}>
+            Suivi <strong>PR</strong>ésence Absence
+          </div>
+        </div>
 
         {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 

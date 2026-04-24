@@ -119,7 +119,10 @@ export default function RoulementsPage() {
                         )}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                        Cycle {r.longueur_cycle}j · Référence: {r.date_debut_reference}
+                        Cycle {r.longueur_cycle}j
+                        {r.date_ref_par_agent
+                          ? ' · Référence: par agent'
+                          : ` · Référence: ${r.date_debut_reference}`}
                         {isGlobal && ' · Commun à tous les services'}
                       </div>
                     </div>
@@ -184,6 +187,7 @@ export default function RoulementsPage() {
           roulement={editRoulement}
           codes={codes}
           serviceId={selectedService?.id}
+          serviceName={selectedService?.nom}
           api={api}
           isAdmin={isAdmin}
           onClose={() => setShowModal(false)}
@@ -347,12 +351,13 @@ function RoulementCalendar({ roulements, codesMap, calDates, feriesSet, calendar
   );
 }
 
-function RoulementModal({ roulement, codes, serviceId, api, isAdmin, onClose, onSaved }) {
+function RoulementModal({ roulement, codes, serviceId, serviceName, api, isAdmin, onClose, onSaved }) {
   const [nom, setNom] = useState(roulement?.nom || '');
   const [longueur, setLongueur] = useState(roulement?.longueur_cycle || 6);
   const [dateRef, setDateRef] = useState(roulement?.date_debut_reference || new Date().toISOString().split('T')[0]);
   const [isGlobal, setIsGlobal] = useState(roulement ? !roulement.service_id : false);
   const [feriesNonTravailles, setFeriesNonTravailles] = useState(roulement?.feries_non_travailles ?? false);
+  const [dateRefParAgent, setDateRefParAgent] = useState(roulement?.date_ref_par_agent ?? false);
   const [cycles, setCycles] = useState(
     roulement?.roulement_cycles
       ? [...roulement.roulement_cycles].sort((a, b) => a.index_jour - b.index_jour).map(c => ({ code: c.code_pointage, label: c.label || '' }))
@@ -379,6 +384,7 @@ function RoulementModal({ roulement, codes, serviceId, api, isAdmin, onClose, on
         date_debut_reference: dateRef,
         service_id: isGlobal ? null : serviceId,
         feries_non_travailles: feriesNonTravailles,
+        date_ref_par_agent: dateRefParAgent,
         cycles
       };
       if (roulement) await api.put(`/roulements/${roulement.id}`, payload);
@@ -392,7 +398,7 @@ function RoulementModal({ roulement, codes, serviceId, api, isAdmin, onClose, on
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ minWidth: 520, maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{roulement ? 'Modifier roulement' : 'Nouveau roulement'}</span>
+          <span className="modal-title">{roulement ? 'Modifier roulement' : 'Nouveau roulement'}{serviceName ? ` — ${serviceName}` : ''}</span>
           <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
@@ -400,7 +406,32 @@ function RoulementModal({ roulement, codes, serviceId, api, isAdmin, onClose, on
             <div className="form-group" style={{ flex: 2 }}><label>Nom</label><input value={nom} onChange={e => setNom(e.target.value)} /></div>
             <div className="form-group" style={{ flex: 1 }}><label>Longueur cycle (jours)</label><input type="number" min={1} max={90} value={longueur} onChange={e => setLongueur(e.target.value)} /></div>
           </div>
-          <div className="form-group"><label>Date de référence (début du cycle)</label><input type="date" value={dateRef} onChange={e => setDateRef(e.target.value)} /></div>
+          <div className="form-group">
+            <label>Date de référence (début du cycle)</label>
+            <input type="date" value={dateRef} onChange={e => setDateRef(e.target.value)} disabled={dateRefParAgent} style={{ opacity: dateRefParAgent ? 0.45 : 1 }} />
+            {dateRefParAgent && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                La date de référence est définie individuellement sur chaque affectation agent.
+              </div>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={dateRefParAgent}
+                onChange={e => setDateRefParAgent(e.target.checked)}
+                style={{ width: 16, height: 16 }}
+              />
+              <span>Date de référence portée par l'agent (pas de référence commune)</span>
+            </label>
+            {dateRefParAgent && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, marginLeft: 24 }}>
+                Chaque agent aura sa propre date de référence, à renseigner lors de son affectation à ce roulement.
+              </div>
+            )}
+          </div>
 
           <div className="form-group">
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>

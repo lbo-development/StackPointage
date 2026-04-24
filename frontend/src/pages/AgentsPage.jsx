@@ -14,13 +14,17 @@ export default function AgentsPage() {
   const { api, can } = useAuth();
   const { selectedService } = useOutletContext();
   const [agents, setAgents] = useState([]);
+  const [agentsSansAff, setAgentsSansAff] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editAgent, setEditAgent] = useState(null);
   const [search, setSearch] = useState('');
   const [filtreContrat, setFiltreContrat] = useState('');
   const [showInactifs, setShowInactifs] = useState(false);
-  const [ordreModal, setOrdreModal] = useState(null); // { cellule, agents[] }
+  const [ordreModal, setOrdreModal] = useState(null);
+  const [affectationModal, setAffectationModal] = useState(null);
+  const [showSansAff, setShowSansAff] = useState(false);
+  const [searchSansAff, setSearchSansAff] = useState('');
 
   function load() {
     if (!api) return;
@@ -28,8 +32,11 @@ export default function AgentsPage() {
     const sid = selectedService?.id || '';
     const params = new URLSearchParams({ service_id: sid });
     if (showInactifs) params.append('include_inactive', '1');
-    api.get(`/agents?${params}`)
-      .then(setAgents)
+    Promise.all([
+      api.get(`/agents?${params}`),
+      sid ? api.get(`/agents/sans-affectation?service_id=${sid}`) : Promise.resolve([]),
+    ])
+      .then(([aff, sansAff]) => { setAgents(aff); setAgentsSansAff(sansAff); })
       .catch(console.error)
       .finally(() => setLoading(false));
   }
@@ -51,6 +58,14 @@ export default function AgentsPage() {
     if (filtreContrat && a.agents?.type_contrat !== filtreContrat) return false;
     return true;
   });
+
+  const filteredSansAff = useMemo(() => {
+    if (!searchSansAff.trim()) return agentsSansAff;
+    const q = searchSansAff.toLowerCase();
+    return agentsSansAff.filter(a =>
+      `${a.nom} ${a.prenom} ${a.matricule}`.toLowerCase().includes(q)
+    );
+  }, [agentsSansAff, searchSansAff]);
 
   // Grouper par cellule pour afficher les boutons "Ordre" par cellule
   const parCellule = useMemo(() => {
@@ -200,11 +215,91 @@ export default function AgentsPage() {
         )
       }
 
+      {/* ── Section agents sans affectation ── */}
+      {agentsSansAff.length > 0 && can('edit_agents') && (
+        <div style={{ marginTop: 24, border: '1px solid var(--warning, #f59e0b)', borderRadius: 6, overflow: 'hidden' }}>
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'rgba(245,158,11,0.08)', cursor: 'pointer' }}
+            onClick={() => setShowSansAff(v => !v)}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning, #f59e0b)', flexShrink: 0 }} />
+            <span style={{ fontWeight: 600, fontSize: 13, flex: 1 }}>
+              Agents importés sans affectation
+              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>
+                {agentsSansAff.length} agent{agentsSansAff.length > 1 ? 's' : ''} à affecter dans ce service
+              </span>
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{showSansAff ? '▲' : '▼'}</span>
+          </div>
+
+          {showSansAff && (
+            <div style={{ padding: '10px 14px 14px', background: 'var(--bg-panel)' }}>
+              <input
+                placeholder="Rechercher nom, prénom, matricule…"
+                value={searchSansAff}
+                onChange={e => setSearchSansAff(e.target.value)}
+                style={{ width: 280, marginBottom: 10 }}
+              />
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 40 }} />
+                    <th>Matricule</th>
+                    <th>Nom</th>
+                    <th>Prénom</th>
+                    <th>Contrat</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSansAff.map(a => {
+                    const contrat = a.type_contrat;
+                    return (
+                      <tr key={a.id}>
+                        <td style={{ padding: '4px 6px' }}>
+                          <AgentAvatar photoUrl={a.photo_url} nom={a.nom} prenom={a.prenom} size={32} />
+                        </td>
+                        <td style={{ fontFamily: 'var(--font-mono)' }}>{a.matricule}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{a.nom}</td>
+                        <td>{a.prenom}</td>
+                        <td>
+                          {contrat ? (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                              background: CONTRAT_COLORS[contrat]?.bg,
+                              color: CONTRAT_COLORS[contrat]?.text,
+                              border: `1px solid ${CONTRAT_COLORS[contrat]?.border}`,
+                            }}>
+                              {contrat}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.email || '—'}</td>
+                        <td>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => setAffectationModal(a)}
+                          >
+                            Affecter
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Modal édition agent */}
       {showModal && (
         <AgentModal
           agent={editAgent}
           serviceId={selectedService?.id}
+          serviceName={selectedService?.nom}
           api={api}
           onClose={() => setShowModal(false)}
           onSaved={() => { setShowModal(false); load(); }}
@@ -221,6 +316,18 @@ export default function AgentsPage() {
           onSaved={() => { setOrdreModal(null); load(); }}
         />
       )}
+
+      {/* Modal affectation agent importé */}
+      {affectationModal && (
+        <AssignmentModal
+          agent={affectationModal}
+          serviceId={selectedService?.id}
+          serviceName={selectedService?.nom}
+          api={api}
+          onClose={() => setAffectationModal(null)}
+          onSaved={() => { setAffectationModal(null); load(); }}
+        />
+      )}
     </div>
   );
 }
@@ -234,7 +341,7 @@ function fileToBase64(file) {
   });
 }
 
-function AgentModal({ agent, serviceId, api, onClose, onSaved }) {
+function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
   const [nom, setNom] = useState(agent?.agents?.nom || '');
   const [prenom, setPrenom] = useState(agent?.agents?.prenom || '');
   const [matricule, setMatricule] = useState(agent?.agents?.matricule || '');
@@ -244,6 +351,7 @@ function AgentModal({ agent, serviceId, api, onClose, onSaved }) {
   const [celluleId, setCelluleId] = useState(agent?.cellule_id || '');
   const [specialiteId, setSpecialiteId] = useState(agent?.specialite_id || '');
   const [roulementId, setRoulementId] = useState(agent?.roulement_id || '');
+  const [dateRefAgent, setDateRefAgent] = useState(agent?.date_debut_reference || '');
   const [dateDebut, setDateDebut] = useState(
     agent?.date_debut || new Date().toISOString().split('T')[0]
   );
@@ -252,6 +360,12 @@ function AgentModal({ agent, serviceId, api, onClose, onSaved }) {
   const [specialites, setSpecialites] = useState([]);
   const [roulements, setRoulements] = useState([]);
   const [saving, setSaving] = useState(false);
+
+  const selectedRoulement = useMemo(
+    () => roulements.find(r => r.id === roulementId),
+    [roulements, roulementId]
+  );
+  const roulementNeedsDateRef = selectedRoulement?.date_ref_par_agent === true;
 
   const originalPhotoUrl = agent?.agents?.photo_url || null;
   const [photoFile, setPhotoFile] = useState(null);
@@ -301,6 +415,7 @@ function AgentModal({ agent, serviceId, api, onClose, onSaved }) {
           roulement_id: roulementId || null,
           date_debut: dateDebut,
           is_active: isActive,
+          date_debut_reference: roulementNeedsDateRef ? (dateRefAgent || null) : null,
         });
       } else {
         const created = await api.post('/agents', {
@@ -312,6 +427,7 @@ function AgentModal({ agent, serviceId, api, onClose, onSaved }) {
             roulement_id: roulementId || null,
             date_debut: dateDebut,
             is_active: isActive,
+            date_debut_reference: roulementNeedsDateRef ? (dateRefAgent || null) : null,
           } : undefined,
         });
         agentId = created.id;
@@ -336,7 +452,7 @@ function AgentModal({ agent, serviceId, api, onClose, onSaved }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{isNew ? 'Nouvel agent' : 'Modifier agent'}</span>
+          <span className="modal-title">{isNew ? 'Nouvel agent' : 'Modifier agent'}{serviceName ? ` — ${serviceName}` : ''}</span>
           <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
@@ -456,12 +572,29 @@ function AgentModal({ agent, serviceId, api, onClose, onSaved }) {
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label>Roulement</label>
-                  <select value={roulementId} onChange={e => setRoulementId(e.target.value)}>
+                  <select value={roulementId} onChange={e => { setRoulementId(e.target.value); setDateRefAgent(''); }}>
                     <option value="">— Aucun —</option>
-                    {roulements.map(r => <option key={r.id} value={r.id}>{r.nom}</option>)}
+                    {roulements.map(r => (
+                      <option key={r.id} value={r.id}>
+                        {r.nom}{r.date_ref_par_agent ? ' ★' : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
+              {roulementNeedsDateRef && (
+                <div className="form-group">
+                  <label>Date de référence du roulement pour cet agent *</label>
+                  <input
+                    type="date"
+                    value={dateRefAgent}
+                    onChange={e => setDateRefAgent(e.target.value)}
+                  />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    Ce roulement utilise une date de référence propre à chaque agent (★).
+                  </div>
+                </div>
+              )}
               <div className="form-row">
                 <div className="form-group" style={{ flex: 1 }}>
                   <label>Date de début d'affectation *</label>
@@ -485,6 +618,137 @@ function AgentModal({ agent, serviceId, api, onClose, onSaved }) {
           <button className="btn" onClick={onClose}>Annuler</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={!canSave || saving}>
             {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AssignmentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
+  const [celluleId, setCelluleId] = useState('');
+  const [specialiteId, setSpecialiteId] = useState('');
+  const [roulementId, setRoulementId] = useState('');
+  const [dateRefAgent, setDateRefAgent] = useState('');
+  const [dateDebut, setDateDebut] = useState(() => new Date().toISOString().split('T')[0]);
+  const [cellules, setCellules] = useState([]);
+  const [specialites, setSpecialites] = useState([]);
+  const [roulements, setRoulements] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  const selectedRoulement = useMemo(
+    () => roulements.find(r => r.id === roulementId),
+    [roulements, roulementId]
+  );
+  const roulementNeedsDateRef = selectedRoulement?.date_ref_par_agent === true;
+
+  useEffect(() => {
+    if (!serviceId) return;
+    Promise.all([
+      api.get(`/services/${serviceId}/cellules`),
+      api.get(`/services/${serviceId}/specialites`),
+      api.get(`/roulements?service_id=${serviceId}`),
+    ]).then(([c, s, r]) => { setCellules(c); setSpecialites(s); setRoulements(r); })
+      .catch(console.error);
+  }, [serviceId]);
+
+  async function handleSave() {
+    if (!celluleId) return;
+    setSaving(true);
+    try {
+      await api.post(`/agents/${agent.id}/assignments`, {
+        service_id: serviceId,
+        cellule_id: celluleId,
+        specialite_id: specialiteId || null,
+        roulement_id: roulementId || null,
+        date_debut: dateDebut,
+        date_debut_reference: roulementNeedsDateRef ? (dateRefAgent || null) : null,
+        is_active: true,
+      });
+      onSaved();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const contrat = agent.type_contrat;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Affecter un agent{serviceName ? ` — ${serviceName}` : ''}</span>
+          <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+
+          {/* Identité — lecture seule */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', background: 'var(--bg-surface)', borderRadius: 4, marginBottom: 14 }}>
+            <AgentAvatar photoUrl={agent.photo_url} nom={agent.nom} prenom={agent.prenom} size={40} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{agent.prenom} {agent.nom}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{agent.matricule}</div>
+            </div>
+            {contrat && (
+              <span style={{
+                marginLeft: 'auto', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                background: CONTRAT_COLORS[contrat]?.bg,
+                color: CONTRAT_COLORS[contrat]?.text,
+                border: `1px solid ${CONTRAT_COLORS[contrat]?.border}`,
+              }}>
+                {contrat}
+              </span>
+            )}
+          </div>
+
+          {/* Affectation */}
+          <div className="form-group">
+            <label>Cellule *</label>
+            <select value={celluleId} onChange={e => { setCelluleId(e.target.value); setSpecialiteId(''); }}>
+              <option value="">— Choisir une cellule —</option>
+              {cellules.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+            </select>
+          </div>
+          <div className="form-row">
+            <div className="form-group" style={{ flex: 1 }}>
+              <label>Spécialité</label>
+              <select value={specialiteId} onChange={e => setSpecialiteId(e.target.value)}>
+                <option value="">— Aucune —</option>
+                {specialites.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label>Roulement</label>
+              <select value={roulementId} onChange={e => { setRoulementId(e.target.value); setDateRefAgent(''); }}>
+                <option value="">— Aucun —</option>
+                {roulements.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.nom}{r.date_ref_par_agent ? ' ★' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {roulementNeedsDateRef && (
+            <div className="form-group">
+              <label>Date de référence du roulement pour cet agent *</label>
+              <input type="date" value={dateRefAgent} onChange={e => setDateRefAgent(e.target.value)} />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                Ce roulement utilise une date de référence propre à chaque agent (★).
+              </div>
+            </div>
+          )}
+          <div className="form-group">
+            <label>Date de début d'affectation *</label>
+            <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onClose}>Annuler</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={!celluleId || saving}>
+            {saving ? 'Enregistrement…' : 'Affecter'}
           </button>
         </div>
       </div>

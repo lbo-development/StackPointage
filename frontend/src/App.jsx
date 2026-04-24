@@ -12,6 +12,7 @@ import ProfilesPage from './pages/ProfilesPage.jsx';
 import ConvocationsPage from './pages/ConvocationsPage.jsx';
 import PrevisionsPage from './pages/PrevisionsPage.jsx';
 import MonEspacePage from './pages/MonEspacePage.jsx';
+import JoursFeriesPage from './pages/JoursFeriesPage.jsx';
 
 function PrivateRoute({ children }) {
   const { session, loading } = useAuth();
@@ -66,6 +67,11 @@ export default function App() {
             <Route path="profils" element={
               <RoleRoute roles={['admin_app']}>
                 <ProfilesPage />
+              </RoleRoute>
+            } />
+            <Route path="jours-feries" element={
+              <RoleRoute roles={['admin_app']}>
+                <JoursFeriesPage />
               </RoleRoute>
             } />
             <Route path="convocations" element={<ConvocationsPage />} />

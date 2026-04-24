@@ -208,6 +208,16 @@ export default function PointageMatrixPage() {
     }
   }
 
+  const modalResetProps = useMemo(() => {
+    if (!pointageModal || !matrixData) return { showReset: false };
+    const assignment = matrixData.agents.find(a => a.agent.id === pointageModal.agent.id);
+    const isRange = pointageModal.dateDebut !== pointageModal.dateFin;
+    const hasReel = dateRange(pointageModal.dateDebut, pointageModal.dateFin)
+      .some(date => { const r = assignment?.reel[date]; return r && !r.is_locked; });
+    const hasTheorique = !isRange && !!assignment?.theorique[pointageModal.dateDebut];
+    return { showReset: hasReel || hasTheorique };
+  }, [pointageModal, matrixData]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* TOOLBAR */}
@@ -283,20 +293,15 @@ export default function PointageMatrixPage() {
         </div>
       )}
 
-      {pointageModal && (() => {
-        const assignment = matrixData?.agents.find(a => a.agent.id === pointageModal.agent.id);
-        const hasReel = dateRange(pointageModal.dateDebut, pointageModal.dateFin)
-          .some(date => { const r = assignment?.reel[date]; return r && !r.is_locked; });
-        return (
-          <PointageModal
-            {...pointageModal}
-            codes={matrixData?.codesMap ? Object.values(matrixData.codesMap) : []}
-            onSave={handleSavePointage}
-            onReset={hasReel ? handleResetPointage : undefined}
-            onClose={() => setPointageModal(null)}
-          />
-        );
-      })()}
+      {pointageModal && (
+        <PointageModal
+          {...pointageModal}
+          codes={matrixData?.codesMap ? Object.values(matrixData.codesMap) : []}
+          onSave={handleSavePointage}
+          onReset={modalResetProps.showReset ? handleResetPointage : undefined}
+          onClose={() => setPointageModal(null)}
+        />
+      )}
     </div>
   );
 }

@@ -115,6 +115,7 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, mode = 'reel') 
 
     const ligneReel = {};
     const ligneTheorique = {};
+    const dateRefOverride = assignment.date_debut_reference || null;
 
     dates.forEach(dateStr => {
       // Code réel (saisi)
@@ -126,7 +127,7 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, mode = 'reel') 
       if (prevision) {
         theorique = prevision;
       } else if (roulement && cycles.length) {
-        const code = calculerCodeRoulement(dateStr, roulement, cycles);
+        const code = calculerCodeRoulement(dateStr, roulement, cycles, dateRefOverride);
         if (code) theorique = { code, source: 'roulement' };
       }
 
