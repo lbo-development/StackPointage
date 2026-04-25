@@ -277,7 +277,7 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
     const { ag, spec } = row;
     const agent = ag.agent;
     return (
-      <div key={`L-ag-${agent.id}`} style={{ ...base, background: 'var(--bg-app)' }}>
+      <div key={`L-ag-${agent.id}`} style={{ ...base, background: 'var(--bg-app)', boxShadow: 'inset 0 -1px 0 var(--border-grid)' }}>
         <div style={{ width: COL_W.indicator, flexShrink: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 11, color: 'var(--text-muted)' }}>
           {spec?.couleur && (
             <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: spec.couleur }} />
@@ -450,60 +450,64 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
       {/* ══════════════ PANNEAU DROIT ══════════════ */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
-        {/* En-tête figé (divs, pas de sticky) — synchronisé horizontalement via JS */}
+        {/* En-tête figé — même table/colgroup que le corps pour alignement pixel-perfect */}
         <div ref={rightHeaderRef} style={{ flexShrink: 0, overflowX: 'hidden' }}>
-          {/* Ligne mois */}
-          <div style={{ display: 'flex', height: HEAD_H1, background: 'var(--bg-panel)' }}>
-            {monthGroups.map((g, i) => (
-              <div key={g.key} style={{
-                width: g.count * COL_W.date, flexShrink: 0, height: HEAD_H1,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'var(--bg-panel)', boxSizing: 'border-box',
-                borderBottom: '1px solid var(--border)',
-                borderLeft: i === 0 ? 'none' : '2px solid var(--border-light)',
-                color: 'var(--text-primary)', fontWeight: 700, fontSize: 11,
-                textTransform: 'capitalize',
-              }}>
-                {g.label}
-              </div>
-            ))}
-          </div>
-          {/* Ligne dates */}
-          <div style={{ display: 'flex', height: HEAD_H2, borderBottom: '1px solid var(--border)' }}>
-            {dates.map(dateStr => {
-              const { isSam, isDim, isFerie, isToday, weekday, day, month } = getDayInfo(dateStr, feriesSet);
-              const isFirst = new Date(dateStr + 'T00:00:00').getDate() === 1;
-              let cls = 'date-header';
-              if (isFerie) cls += ' ferie';
-              else if (isDim) cls += ' dimanche';
-              else if (isSam) cls += ' weekend';
-              if (isToday) cls += ' today';
-              return (
-                <div key={dateStr} className={cls} title={dateStr} style={{
-                  width: COL_W.date, flexShrink: 0, height: HEAD_H2,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxSizing: 'border-box',
-                  ...(isFirst ? { borderLeft: '2px solid var(--border-light)' } : {}),
-                }}>
-                  <div style={{ lineHeight: 1.2, textAlign: 'center' }}>
-                    <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{weekday}</div>
-                    <div style={{ fontSize: 12, fontWeight: 700 }}>{day}</div>
-                    <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{month}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <table style={{ tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: 0, width: dates.length * COL_W.date }}>
+            <colgroup>
+              {dates.map(d => <col key={d} style={{ width: COL_W.date }} />)}
+            </colgroup>
+            <thead>
+              <tr style={{ height: HEAD_H1 }}>
+                {monthGroups.map((g, i) => (
+                  <th key={g.key} colSpan={g.count} style={{
+                    background: 'var(--bg-panel)',
+                    borderBottom: '1px solid var(--border)',
+                    borderLeft: i === 0 ? 'none' : '2px solid var(--border-light)',
+                    color: 'var(--text-primary)', fontWeight: 700, fontSize: 11,
+                    textAlign: 'center', textTransform: 'capitalize',
+                    padding: 0, height: HEAD_H1,
+                  }}>
+                    {g.label}
+                  </th>
+                ))}
+              </tr>
+              <tr style={{ height: HEAD_H2 }}>
+                {dates.map(dateStr => {
+                  const { isSam, isDim, isFerie, isToday, weekday, day, month } = getDayInfo(dateStr, feriesSet);
+                  const isFirst = new Date(dateStr + 'T00:00:00').getDate() === 1;
+                  let cls = 'date-header';
+                  if (isFerie) cls += ' ferie';
+                  else if (isDim) cls += ' dimanche';
+                  else if (isSam) cls += ' weekend';
+                  if (isToday) cls += ' today';
+                  return (
+                    <th key={dateStr} className={cls} title={dateStr} style={{
+                      height: HEAD_H2,
+                      padding: 0,
+                      ...(isFirst ? { borderLeft: '2px solid var(--border-light)' } : {}),
+                    }}>
+                      <div style={{ lineHeight: 1.2 }}>
+                        <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{weekday}</div>
+                        <div style={{ fontSize: 12, fontWeight: 700 }}>{day}</div>
+                        <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{month}</div>
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+          </table>
         </div>
 
         {/* Corps scrollable */}
         <div
           ref={rightBodyRef}
           className="matrix-scroll-panel"
-          style={{ flex: 1, overflowX: 'scroll', overflowY: 'auto' }}
+          style={{ flex: 1, minHeight: 0, overflowX: 'scroll', overflowY: 'auto' }}
           onScroll={handleRightScroll}
+          onClick={e => { if (!e.target.closest('.pointage-cell')) setSelection(null); }}
         >
-          <table style={{ tableLayout: 'fixed', borderCollapse: 'collapse' }}>
+          <table style={{ tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: 0, width: dates.length * COL_W.date }}>
             <colgroup>
               {dates.map(d => <col key={d} style={{ width: COL_W.date }} />)}
             </colgroup>
