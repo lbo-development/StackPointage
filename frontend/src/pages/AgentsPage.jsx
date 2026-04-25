@@ -67,16 +67,30 @@ export default function AgentsPage() {
     );
   }, [agentsSansAff, searchSansAff]);
 
-  // Grouper par cellule pour afficher les boutons "Ordre" par cellule
+  // Grouper par cellule (depuis les données triées) pour les boutons "Ordre"
   const parCellule = useMemo(() => {
     const map = {};
-    agents.forEach(a => {
+    sorted.forEach(a => {
       const cid = a.cellule_id;
       if (!map[cid]) map[cid] = { cellule: a.cellules, agents: [] };
       map[cid].agents.push(a);
     });
     return map;
-  }, [agents]);
+  }, [sorted]);
+
+  // Rows de la table : une ligne d'en-tête de cellule + les agents, dans l'ordre
+  const groupedRows = useMemo(() => {
+    const rows = [];
+    let lastCid = null;
+    filtered.forEach(a => {
+      if (a.cellule_id !== lastCid) {
+        rows.push({ type: 'header', cellule: a.cellules, celluleId: a.cellule_id });
+        lastCid = a.cellule_id;
+      }
+      rows.push({ type: 'agent', a });
+    });
+    return rows;
+  }, [filtered]);
 
   return (
     <div className="page-wrapper">
@@ -144,7 +158,6 @@ export default function AgentsPage() {
                 <th>Prénom</th>
                 <th>Téléphone</th>
                 <th>Contrat</th>
-                <th>Cellule</th>
                 <th>Spécialité</th>
                 <th>Roulement</th>
                 <th>Depuis</th>
@@ -152,7 +165,25 @@ export default function AgentsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(a => {
+              {groupedRows.map((row, i) => {
+                if (row.type === 'header') {
+                  return (
+                    <tr key={`hdr-${row.celluleId}`}>
+                      <td colSpan={11} style={{
+                        padding: '6px 12px',
+                        background: 'var(--bg-panel)',
+                        borderTop: i === 0 ? 'none' : '2px solid var(--border)',
+                        borderBottom: '1px solid var(--border)',
+                      }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          <span style={{ width: 9, height: 9, borderRadius: '50%', background: row.cellule?.couleur, flexShrink: 0 }} />
+                          {row.cellule?.nom}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                }
+                const { a } = row;
                 const contrat = a.agents?.type_contrat;
                 const nonCDD = contrat && contrat !== 'CDI';
                 return (
@@ -190,12 +221,6 @@ export default function AgentsPage() {
                           {contrat}
                         </span>
                       ) : '—'}
-                    </td>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: a.cellules?.couleur }} />
-                        {a.cellules?.nom}
-                      </span>
                     </td>
                     <td>{a.specialites?.nom || '—'}</td>
                     <td>{a.roulements?.nom || '—'}</td>

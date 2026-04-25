@@ -15,7 +15,7 @@ router.get('/', requireServiceScope, async (req, res) => {
       .select(`
         *,
         agents(*),
-        cellules(nom, code, couleur),
+        cellules(nom, code, couleur, ordre),
         specialites(nom, code, couleur),
         roulements(nom)
       `);

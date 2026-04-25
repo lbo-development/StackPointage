@@ -156,7 +156,7 @@ export default function AppShell() {
             {profile?.prenom} {profile?.nom}
           </span>
           <span className="badge badge-blue">{ROLE_LABELS[profile?.role]}</span>
-          <button className="btn btn-sm" onClick={logout}>Déconnexion</button>
+          <button className="btn btn-sm" onClick={() => { logout(); navigate('/login'); }}>Déconnexion</button>
         </div>
       </header>
 

@@ -75,7 +75,7 @@ export default function LoginPage() {
             disabled={loading}
             style={{ width: '100%', justifyContent: 'center', padding: '8px', marginTop: 4 }}
           >
-            {loading ? <><span className="loading-spinner" style={{ width: 12, height: 12 }} /> Connexion…</> : 'Se connecter'}
+            {loading ? <><span className="loading-spinner" style={{ width: 12, height: 12 }} /> Connexion…</> : 'Connexion'}
           </button>
         </form>
       </div>
