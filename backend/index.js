@@ -13,6 +13,7 @@ import previsionsRoutes from "./routes/previsions.js";
 import exportRoutes from "./routes/export.js";
 import profilesRoutes from "./routes/profiles.js";
 import joursFeriesRoutes from "./routes/jours-feries.js";
+import statsRoutes from "./routes/stats.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -33,6 +34,7 @@ app.use("/api/previsions", previsionsRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/profiles", profilesRoutes);
 app.use("/api/jours-feries", joursFeriesRoutes);
+app.use("/api/stats", statsRoutes);
 
 app.get("/api/health", (req, res) =>
   res.json({ status: "ok", timestamp: new Date() }),

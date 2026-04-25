@@ -1,8 +1,15 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 const TODAY    = new Date().toISOString().split('T')[0];
-const COL_W    = { indicator: 32, nom: 130, prenom: 100, date: 36 };
-const FROZEN_W = COL_W.indicator + COL_W.nom + COL_W.prenom; // 262px
+const _vw      = window.innerWidth;
+const COL_W    = {
+  indicator: 32,
+  nom:    _vw < 1100 ? 105 : 130,
+  prenom: _vw < 1100 ?  75 : 100,
+  date:   36,
+};
+const FROZEN_W = COL_W.indicator + COL_W.nom + COL_W.prenom;
 const HEAD_H1  = 24;  // ligne mois
 const HEAD_H2  = 50;  // ligne dates
 const ROW_H    = { 'cellule-header': 27, 'specialite-header': 22, agent: 26, cumuls: 22 };
@@ -26,7 +33,7 @@ function normalizeRange(s) {
     : { agentId: s.agentId, startDate: s.endDate,   endDate: s.startDate };
 }
 
-export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
+export default function PointageMatrix({ data, mode, canEdit, onRightClick, serviceId, dateDebut, dateFin }) {
   const { dates, cellules, specialites, agents, cumuls, feries, codesMap } = data;
   const feriesSet = useMemo(() => new Set(feries || []), [feries]);
 
@@ -528,50 +535,124 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick }) {
       <StatsModal
         cellule={statsModal}
         agents={agents}
-        dates={dates}
-        codesMap={codesMap}
+        serviceId={serviceId}
+        dateDebut={dateDebut}
+        dateFin={dateFin}
         onClose={() => setStatsModal(null)}
       />
     )}
   </>);
 }
 
-// ─── Modale statistiques d'une cellule ─────────────────────────────────────────
-function StatsModal({ cellule, agents, dates, codesMap, onClose }) {
-  const celluleAgents = agents.filter(ag => ag.cellule_id === cellule.id);
-  const nbAgents = celluleAgents.length;
+// ─── Donut chart ─────────────────────────────────────────────────────────────
+function PieChart({ slices }) {
+  const total = slices.reduce((s, d) => s + d.count, 0);
+  if (!total) return <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun code sur cette période</div>;
 
-  // Comptage des codes et cumuls par type
-  const codeCounts = {};
-  let totalEntries = 0;
-  const typeCounts = { matin: 0, apres_midi: 0, nuit: 0, journee: 0, autre: 0 };
+  const r = 58, cx = 75, cy = 75, sw = 26;
+  let angle = -Math.PI / 2;
 
-  celluleAgents.forEach(ag => {
-    dates.forEach(date => {
-      const entry = ag.reel[date] || ag.theorique[date];
-      if (!entry?.code) return;
-      codeCounts[entry.code] = (codeCounts[entry.code] || 0) + 1;
-      totalEntries++;
-      const codeType = codesMap[entry.code]?.type;
-      if (codeType && typeCounts[codeType] !== undefined) typeCounts[codeType]++;
-      else typeCounts.autre++;
-    });
+  const arcs = slices.map(s => {
+    const a = (s.count / total) * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(angle);
+    const y1 = cy + r * Math.sin(angle);
+    angle += a;
+    const x2 = cx + r * Math.cos(angle);
+    const y2 = cy + r * Math.sin(angle);
+    return { ...s, path: `M ${x1} ${y1} A ${r} ${r} 0 ${a > Math.PI ? 1 : 0} 1 ${x2} ${y2}`, pct: Math.round((s.count / total) * 100) };
   });
 
-  const topCodes = Object.entries(codeCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const maxCodeCount = topCodes[0]?.[1] || 1;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+      <svg width="150" height="150" viewBox="0 0 150 150" style={{ flexShrink: 0 }}>
+        {arcs.map((a, i) => (
+          <path key={i} d={a.path} fill="none" stroke={a.color} strokeWidth={sw} opacity={0.9} />
+        ))}
+        <text x={cx} y={cy - 5} textAnchor="middle" style={{ fontSize: 20, fontWeight: 700, fill: '#f1f5f9' }}>{total}</text>
+        <text x={cx} y={cy + 13} textAnchor="middle" style={{ fontSize: 10, fill: '#64748b' }}>entrées</text>
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {arcs.map((a, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: a.color, flexShrink: 0, display: 'inline-block' }} />
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, minWidth: 70 }}>{a.label}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', minWidth: 28, textAlign: 'right' }}>{a.count}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 36, textAlign: 'right' }}>{a.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  const typeConfig = [
-    { key: 'matin',      label: 'Matin',       color: '#f59e0b' },
-    { key: 'apres_midi', label: 'Après-midi',   color: '#3b82f6' },
-    { key: 'nuit',       label: 'Nuit',         color: '#6366f1' },
-    { key: 'journee',    label: 'Journée',      color: '#10b981' },
-    { key: 'autre',      label: 'Autre / N/A',  color: '#94a3b8' },
-  ].filter(t => typeCounts[t.key] > 0);
+// ─── Modale statistiques d'une cellule ─────────────────────────────────────────
+const TYPE_COLORS = {
+  'Présence':       '#22c55e',
+  'Repos':          '#3b82f6',
+  'Congé':          '#a855f7',
+  'Maladie':        '#ef4444',
+  'Absence':        '#f97316',
+  'Autre absence':  '#64748b',
+  'Autre présence': '#10b981',
+  'Autre':          '#94a3b8',
+};
 
-  const maxTypeCount = Math.max(...typeConfig.map(t => typeCounts[t.key]), 1);
+function StatsModal({ cellule, agents, serviceId, dateDebut, dateFin, onClose }) {
+  const { api } = useAuth();
+  const celluleAgents = agents.filter(ag => ag.cellule_id === cellule.id);
+
+  const [filtAgent, setFiltAgent] = useState('');
+  const [filtDébut, setFiltDébut] = useState(dateDebut ?? '');
+  const [filtFin,   setFiltFin]   = useState(dateFin   ?? '');
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState(null);
+  const [statsData, setStatsData] = useState(null);
+
+  const fetchStats = useCallback(async () => {
+    if (!serviceId || !filtDébut || !filtFin) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        service_id: serviceId,
+        date_debut: filtDébut,
+        date_fin:   filtFin,
+        cellule_id: cellule.id,
+      });
+      if (filtAgent) params.set('agent_ids', filtAgent);
+      const res = await api.get(`/stats?${params}`);
+      setStatsData(res);
+    } catch (e) {
+      setError(e.message ?? 'Erreur de chargement');
+    } finally {
+      setLoading(false);
+    }
+  }, [api, serviceId, filtDébut, filtFin, cellule.id, filtAgent]);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const fmtDate = d => new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const totalEntries = statsData?.meta.total ?? 0;
+
+  const allCodes = statsData
+    ? Object.entries(statsData.parCode)
+        .map(([code, v]) => ({ code, count: v.count, couleur: v.couleur, libelle: v.libelle }))
+        .sort((a, b) => b.count - a.count)
+    : [];
+  const maxCodeCount = allCodes[0]?.count || 1;
+
+  const typeConfig = statsData
+    ? Object.entries(statsData.parType)
+        .filter(([, v]) => v.count > 0)
+        .map(([type, v]) => ({
+          key:   type,
+          label: type,
+          color: TYPE_COLORS[type] ?? '#94a3b8',
+          count: v.count,
+        }))
+        .sort((a, b) => b.count - a.count)
+    : [];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -586,68 +667,121 @@ function StatsModal({ cellule, agents, dates, codesMap, onClose }) {
 
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-          {/* Résumé */}
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
-            <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 18 }}>{nbAgents}</span>
-            <span> agent{nbAgents > 1 ? 's' : ''} &nbsp;·&nbsp; </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{fmtDate(dates[0])} → {fmtDate(dates[dates.length - 1])}</span>
-            <span> &nbsp;·&nbsp; </span>
-            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{totalEntries}</span>
-            <span> entrées</span>
-          </div>
+          {/* Filtres */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <select
+              value={filtAgent}
+              onChange={e => setFiltAgent(e.target.value)}
+              style={{
+                flex: 1, minWidth: 160,
+                background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                color: 'var(--text-primary)', borderRadius: 6,
+                padding: '5px 8px', fontSize: 12, cursor: 'pointer',
+              }}
+            >
+              <option value="">Tous les agents ({celluleAgents.length})</option>
+              {celluleAgents.map(ag => (
+                <option key={ag.agent.id} value={String(ag.agent.id)}>
+                  {ag.agent.prenom} {ag.agent.nom}
+                </option>
+              ))}
+            </select>
 
-          {/* Répartition par type */}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
-              Répartition par type de poste
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              borderRadius: 6, padding: '4px 8px',
+            }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', userSelect: 'none' }}>Du</span>
+              <input
+                type="date"
+                value={filtDébut}
+                max={filtFin || undefined}
+                onChange={e => setFiltDébut(e.target.value)}
+                style={{
+                  background: 'transparent', border: 'none', outline: 'none',
+                  color: 'var(--text-primary)', fontSize: 12, cursor: 'pointer',
+                  colorScheme: 'dark',
+                }}
+              />
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', userSelect: 'none' }}>au</span>
+              <input
+                type="date"
+                value={filtFin}
+                min={filtDébut || undefined}
+                onChange={e => setFiltFin(e.target.value)}
+                style={{
+                  background: 'transparent', border: 'none', outline: 'none',
+                  color: 'var(--text-primary)', fontSize: 12, cursor: 'pointer',
+                  colorScheme: 'dark',
+                }}
+              />
             </div>
-            {typeConfig.length === 0 && (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun code sur cette période</div>
-            )}
-            {typeConfig.map(t => (
-              <div key={t.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-                <div style={{ width: 74, fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0, textAlign: 'right' }}>{t.label}</div>
-                <div style={{ flex: 1, height: 14, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${(typeCounts[t.key] / maxTypeCount) * 100}%`, background: t.color, borderRadius: 3, transition: 'width 0.3s' }} />
-                </div>
-                <div style={{ width: 32, fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right', flexShrink: 0 }}>{typeCounts[t.key]}</div>
-                <div style={{ width: 34, fontSize: 10, color: 'var(--text-muted)', textAlign: 'right', flexShrink: 0 }}>
-                  {totalEntries ? `${Math.round(typeCounts[t.key] / totalEntries * 100)}%` : ''}
-                </div>
-              </div>
-            ))}
           </div>
 
-          {/* Top codes */}
-          {topCodes.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
-                Codes les plus utilisés
+          {/* État chargement / erreur */}
+          {loading && (
+            <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, padding: '8px 0' }}>
+              Chargement…
+            </div>
+          )}
+          {error && (
+            <div style={{ fontSize: 12, color: '#f87171', background: '#450a0a', borderRadius: 6, padding: '8px 12px' }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          {!loading && !error && statsData && (
+            <>
+              {/* Résumé */}
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 18 }}>{statsData.meta.nbAgents}</span>
+                <span> agent{statsData.meta.nbAgents > 1 ? 's' : ''} &nbsp;·&nbsp; </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{fmtDate(filtDébut)} → {fmtDate(filtFin)}</span>
+                <span> &nbsp;·&nbsp; </span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{totalEntries}</span>
+                <span> entrées</span>
               </div>
-              {topCodes.map(([code, count]) => {
-                const info = codesMap[code];
-                return (
-                  <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                    <div style={{
-                      width: 32, height: 20, borderRadius: 3, flexShrink: 0,
-                      background: info?.bg_color || 'var(--bg-surface)',
-                      color: info?.text_color || 'var(--text-primary)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)',
-                    }}>
-                      {code}
-                    </div>
-                    <div style={{ width: 110, fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flexShrink: 0 }}>
-                      {info?.libelle || '—'}
-                    </div>
-                    <div style={{ flex: 1, height: 10, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${(count / maxCodeCount) * 100}%`, background: info?.bg_color || 'var(--border)', borderRadius: 3 }} />
-                    </div>
-                    <div style={{ width: 32, fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right', flexShrink: 0 }}>{count}</div>
+
+              {/* Répartition par type */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
+                  Répartition par type
+                </div>
+                <PieChart slices={typeConfig} />
+              </div>
+
+              {/* Top codes */}
+              {allCodes.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                    Codes de pointage
                   </div>
-                );
-              })}
-            </div>
+                  <div style={{ maxHeight: 125, overflowY: 'auto', paddingRight: 8 }}>
+                  {allCodes.map(({ code, count, couleur, libelle }) => (
+                    <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                      <div style={{
+                        width: 32, height: 20, borderRadius: 3, flexShrink: 0,
+                        background: couleur || 'var(--bg-surface)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)',
+                        color: '#000',
+                      }}>
+                        {code}
+                      </div>
+                      <div style={{ width: 110, fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flexShrink: 0 }}>
+                        {libelle || '—'}
+                      </div>
+                      <div style={{ flex: 1, height: 10, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${(count / maxCodeCount) * 100}%`, background: couleur || 'var(--border)', borderRadius: 3 }} />
+                      </div>
+                      <div style={{ width: 32, fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right', flexShrink: 0 }}>{count}</div>
+                    </div>
+                  ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
         </div>

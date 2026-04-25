@@ -222,49 +222,47 @@ export default function PointageMatrixPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* TOOLBAR */}
       <div className="toolbar">
-        <button className="btn btn-sm" onClick={() => shiftPeriod(-1)}>◀</button>
+
+        {/* 1. Rafraîchir */}
+        <button className="btn btn-sm btn-icon" onClick={loadMatrix} title="Rafraîchir">↺</button>
+
+        {/* 2. Nom service / cellule */}
+        {selectedService && (
+          <span className="toolbar-context">
+            {selectedService.nom}{selectedCellule ? ` › ${selectedCellule.nom}` : ''}
+          </span>
+        )}
+
+        <div className="toolbar-sep" />
+
+        {/* 3. Aujourd'hui */}
         <button className="btn btn-sm" onClick={goToToday}>Aujourd'hui</button>
-        <button className="btn btn-sm" onClick={() => shiftPeriod(1)}>▶</button>
 
-        <select
-          value={selectedMonthValue}
-          onChange={handleMonthSelect}
-          style={{ minWidth: 150 }}
-        >
-          <option value="">— Mois —</option>
-          {monthOptions.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+        {/* 4. Période : ◀ date début → date fin ▶ */}
+        <div className="toolbar-group">
+          <button className="btn btn-sm btn-icon" onClick={() => shiftPeriod(-1)} title="Période précédente">◀</button>
+          <input
+            type="date"
+            value={dateDebut}
+            onChange={e => setDateDebut(e.target.value)}
+            style={{ width: 115 }}
+          />
+          <span style={{ color: 'var(--text-muted)', fontSize: 11, whiteSpace: 'nowrap' }}>→ {dateFin}</span>
+          <button className="btn btn-sm btn-icon" onClick={() => shiftPeriod(1)} title="Période suivante">▶</button>
+        </div>
 
-        <input
-          type="date"
-          value={dateDebut}
-          onChange={e => setDateDebut(e.target.value)}
-          style={{ width: 130 }}
-        />
-        <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→ {dateFin}</span>
-
+        {/* 5. Durée */}
         <div className="toggle-group">
           <button className={`toggle-btn ${duree === 31 ? 'active' : ''}`} onClick={() => handleDureeToggle(31)}>31j</button>
           <button className={`toggle-btn ${duree === 62 ? 'active' : ''}`} onClick={() => handleDureeToggle(62)}>62j</button>
         </div>
 
+        {/* 6. Réel / Théorique */}
         <div className="toggle-group">
-          <button className={`toggle-btn ${mode === 'reel' ? 'active' : ''}`} onClick={() => setMode('reel')}>Réel</button>
+          <button className={`toggle-btn ${mode === 'reel'      ? 'active' : ''}`} onClick={() => setMode('reel')}>Réel</button>
           <button className={`toggle-btn ${mode === 'theorique' ? 'active' : ''}`} onClick={() => setMode('theorique')}>Théorique</button>
         </div>
 
-        <button className="btn btn-sm" onClick={handleExport}>
-          ↓ Export Excel
-        </button>
-        <button className="btn btn-sm" onClick={loadMatrix}>↺ Rafraîchir</button>
-
-        {selectedService && (
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            {selectedService.nom}{selectedCellule ? ` › ${selectedCellule.nom}` : ''}
-          </span>
-        )}
       </div>
 
       {error && <div className="alert alert-error" style={{ margin: '8px 16px' }}>{error}</div>}
@@ -282,6 +280,9 @@ export default function PointageMatrixPage() {
           mode={mode}
           canEdit={can('edit_pointage')}
           onRightClick={handleRightClick}
+          serviceId={selectedService?.id || profile?.service_id}
+          dateDebut={dateDebut}
+          dateFin={dateFin}
         />
       )}
 

@@ -360,10 +360,37 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 6px 16px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
+  row-gap: 6px;
+  min-height: 44px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.toolbar-context {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.01em;
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
 }
 
 /* ============ BOUTONS ============ */
@@ -504,6 +531,9 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
   position: relative;
   transition: filter 0.1s;
   box-shadow: inset 0 -1px 0 var(--border-grid), inset -1px 0 0 var(--border-grid);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .pointage-cell:hover { filter: brightness(1.3); outline: 2px solid var(--accent); outline-offset: -1px; z-index: 1; }
@@ -849,18 +879,91 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
   margin-bottom: 28px;
 }
 
-/* ============ TABLETTE ============ */
-@media (max-width: 1280px) {
+/* ============ TABLETTE ≥ 768px ============ */
+@media (min-width: 768px) {
+  /* Touch-scroll naturel sur le panneau dates */
+  .matrix-scroll-panel {
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ============ TABLETTE 768-1279px ============ */
+@media (min-width: 768px) and (max-width: 1279px) {
+  :root {
+    --sidebar-w: 200px;
+  }
+
+  /* Toolbar : wrap en 2 lignes si besoin, pas de scroll */
+  .toolbar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding: 6px 12px;
+    gap: 6px;
+    row-gap: 6px;
+  }
+
+  /* Boutons : hauteur tactile minimum */
+  .btn     { min-height: 36px; }
+  .btn-sm  { min-height: 32px; padding: 4px 10px; font-size: 12px; }
+  .btn-icon { min-height: 36px; min-width: 36px; }
+
+  /* Toggle */
+  .toggle-btn { padding: 5px 12px; font-size: 12px; min-height: 32px; }
+
+  /* Onglets nav */
+  .nav-tab { padding: 10px 14px; font-size: 13px; }
+
+  /* Sidebar tree */
+  .tree-item       { padding: 9px 12px; font-size: 13px; }
+  .tree-item.child { padding: 9px 12px 9px 28px; }
+
+  /* Paramètres dropdown */
+  .settings-dropdown-item { padding: 11px 14px; font-size: 13px; }
+  .sidebar-settings-btn   { padding: 12px 14px; font-size: 13px; }
+  .sidebar-theme-btn      { width: 44px; height: 44px; font-size: 17px; }
+
+  /* Inputs */
+  input, select { padding: 7px 10px; font-size: 13px; }
+  label { font-size: 12px; }
+
+  /* Context menu — cible tactile */
+  .context-menu-item { padding: 11px 14px; font-size: 13px; }
+  .context-menu      { min-width: 220px; }
+
+  /* Codes dans la modal pointage */
+  .code-list-item { padding: 11px 12px; }
+
+  /* Modales globales */
+  .modal {
+    min-width: min(90vw, 400px);
+    max-width: min(90vw, 600px);
+  }
+
+  /* Data tables */
+  .data-table td, .data-table th { padding: 10px 14px; font-size: 13px; }
+
+  /* Scrollbar matrix : plus épaisse pour le toucher */
+  .matrix-scroll-panel::-webkit-scrollbar { height: 14px; width: 14px; }
+  .matrix-scroll-panel::-webkit-scrollbar-thumb { border-width: 3px; }
+}
+
+/* ============ TABLETTE PORTRAIT < 900px ============ */
+@media (max-width: 899px) {
+  :root { --sidebar-w: 180px; }
+}
+
+/* ============ MOBILE < 768px ============ */
+@media (max-width: 767px) {
+  .sidebar { display: none; }
+  .matrix-container { font-size: 10px; }
+  .login-card { width: 90vw; padding: 24px; }
+  .modal { min-width: 92vw; max-width: 92vw; }
   .toolbar {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
   .toolbar::-webkit-scrollbar { display: none; }
-}
-
-/* ============ MOBILE ============ */
-@media (max-width: 768px) {
-  .sidebar { display: none; }
-  .matrix-container { font-size: 10px; }
 }
