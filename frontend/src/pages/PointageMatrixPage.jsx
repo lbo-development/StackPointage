@@ -25,7 +25,7 @@ function parseLocal(str) {
 
 export default function PointageMatrixPage() {
   const { api, can, profile, isAgent, isAdmin, isAdminService, isAssistantRH } = useAuth();
-  const canManageCumuls = isAdminService;
+  const canManageCumuls = isAdmin || isAdminService;
   const { selectedService, selectedCellule } = useOutletContext();
 
   const [duree, setDuree]         = useState(31);   // 31 ou 62 jours

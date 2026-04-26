@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
   res.json(data || []);
 });
 
-router.post('/', requireRole('admin_service'), async (req, res) => {
+router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => {
   const { data, error } = await supabase
     .from('cellule_cumuls')
     .insert(req.body)
@@ -36,7 +36,7 @@ router.post('/', requireRole('admin_service'), async (req, res) => {
   res.status(201).json(data);
 });
 
-router.put('/:id', requireRole('admin_service'), async (req, res) => {
+router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
   const { data, error } = await supabase
     .from('cellule_cumuls')
     .update(req.body)
@@ -47,7 +47,7 @@ router.put('/:id', requireRole('admin_service'), async (req, res) => {
   res.json(data);
 });
 
-router.delete('/:id', requireRole('admin_service'), async (req, res) => {
+router.delete('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
   const { error } = await supabase.from('cellule_cumuls').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
