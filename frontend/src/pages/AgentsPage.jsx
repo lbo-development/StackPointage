@@ -94,7 +94,8 @@ export default function AgentsPage() {
   }, [filtered]);
 
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+      <div style={{ padding: '16px 16px 0', flexShrink: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 className="page-title">Agents {selectedService ? `— ${selectedService.nom}` : ''}</h1>
         {can('edit_agents') && (
@@ -145,12 +146,14 @@ export default function AgentsPage() {
           )
         ))}
       </div>
+      </div>{/* fin padding-wrapper */}
 
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
       {loading
         ? <div className="loading-overlay"><div className="loading-spinner" /></div>
         : (
           <table className="data-table">
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
                 <th style={{ width: 40 }} />
                 <th style={{ width: 36, textAlign: 'center' }}>#</th>
@@ -321,6 +324,7 @@ export default function AgentsPage() {
           )}
         </div>
       )}
+      </div>{/* fin scroll-wrapper */}
 
       {/* Modal édition agent */}
       {showModal && (

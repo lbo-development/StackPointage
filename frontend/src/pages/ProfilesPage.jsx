@@ -52,7 +52,8 @@ export default function ProfilesPage() {
   });
 
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+      <div style={{ padding: '16px 16px 0', flexShrink: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 className="page-title">Profils utilisateurs</h1>
         {!isViewer && (
@@ -89,12 +90,14 @@ export default function ProfilesPage() {
           <span style={{ color: 'var(--text-muted)' }}>Inclure inactifs</span>
         </label>
       </div>
+      </div>{/* fin padding-wrapper */}
 
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
       {loading
         ? <div className="loading-overlay"><div className="loading-spinner" /></div>
         : (
           <table className="data-table">
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
                 <th>Email</th>
                 <th style={{ width: 140 }}>Rôle</th>
@@ -177,6 +180,7 @@ export default function ProfilesPage() {
           </table>
         )
       }
+      </div>{/* fin scroll-wrapper */}
 
       {showModal && (
         <ProfileModal

@@ -35,7 +35,8 @@ export default function SpecialitesPage() {
   }
 
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+      <div style={{ padding: '16px 16px 0', flexShrink: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 className="page-title">
           Spécialités — {selectedService.nom}
@@ -61,12 +62,14 @@ export default function SpecialitesPage() {
           </button>
         )}
       </div>
+      </div>{/* fin padding-wrapper */}
 
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
       {loading
         ? <div className="loading-overlay"><div className="loading-spinner" /></div>
         : (
           <table className="data-table">
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
                 <th style={{ width: 40 }}>Ordre</th>
                 <th style={{ width: 60 }}>Code</th>
@@ -131,6 +134,7 @@ export default function SpecialitesPage() {
           </table>
         )
       }
+      </div>{/* fin scroll-wrapper */}
 
       {showModal && (
         <SpecialiteModal

@@ -76,7 +76,8 @@ export default function ServicesPage() {
   }
 
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+      <div style={{ padding: '16px 16px 0', flexShrink: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 className="page-title">Services &amp; Cellules</h1>
         {canEditService && (
@@ -112,7 +113,9 @@ export default function ServicesPage() {
           </button>
         )}
       </div>
+      </div>{/* fin padding-wrapper */}
 
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
       {loading
         ? <div className="loading-overlay"><div className="loading-spinner" /></div>
         : (
@@ -140,6 +143,7 @@ export default function ServicesPage() {
           </div>
         )
       }
+      </div>{/* fin scroll-wrapper */}
 
       {showServiceModal && (
         <ServiceModal

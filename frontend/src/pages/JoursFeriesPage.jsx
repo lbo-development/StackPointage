@@ -76,7 +76,8 @@ export default function JoursFeriesPage() {
   const inactifs = feries.length - actifs;
 
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+      <div style={{ padding: '16px 16px 0', flexShrink: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 className="page-title">Jours Fériés</h1>
         <button className="btn btn-primary" onClick={() => setEditModal({ ferie: null })}>
@@ -114,7 +115,9 @@ export default function JoursFeriesPage() {
           </span>
         )}
       </div>
+      </div>{/* fin padding-wrapper */}
 
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
       {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
 
       {loading
@@ -136,7 +139,7 @@ export default function JoursFeriesPage() {
           )
           : (
             <table className="data-table">
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
                   <th>Date</th>
                   <th>Libellé</th>
@@ -189,6 +192,7 @@ export default function JoursFeriesPage() {
             </table>
           )
       }
+      </div>{/* fin scroll-wrapper */}
 
       {editModal && (
         <FerieModal
