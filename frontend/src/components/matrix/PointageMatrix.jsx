@@ -1,17 +1,18 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 
-const TODAY    = new Date().toISOString().split('T')[0];
-const _vw      = window.innerWidth;
-const COL_W    = {
+const TODAY     = new Date().toISOString().split('T')[0];
+const _vw       = window.innerWidth;
+const isTablet  = _vw < 1100;
+const COL_W     = {
   indicator: 32,
-  nom:    _vw < 1100 ? 105 : 130,
-  prenom: _vw < 1100 ?  75 : 100,
-  date:   36,
+  nom:    isTablet ? 105 : 130,
+  prenom: isTablet ?  75 : 100,
+  date:   isTablet ?  26 : 36,
 };
 const FROZEN_W = COL_W.indicator + COL_W.nom + COL_W.prenom;
-const HEAD_H1  = 24;  // ligne mois
-const HEAD_H2  = 50;  // ligne dates
+const HEAD_H1  = 24;
+const HEAD_H2  = isTablet ? 34 : 50;
 const ROW_H    = { 'cellule-header': 27, 'specialite-header': 22, agent: 26, 'cumul-custom': 22 };
 
 function getDayInfo(dateStr, feriesSet) {
@@ -139,13 +140,16 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
   cellules.forEach(cellule => {
     const group = grouped[cellule.id];
     if (!group) return;
-    rows.push({ type: 'cellule-header', cellule });
+    const hasAgents = group.agentsDirect.length > 0 || Object.values(group.specialites).some(a => a.length > 0);
+    rows.push({ type: 'cellule-header', cellule, hasAgents });
     Object.entries(group.specialites).forEach(([sid, sAgents]) => {
       rows.push({ type: 'specialite-header', spec: specialitesMap[sid], cellule_id: cellule.id });
       sAgents.forEach(ag => rows.push({ type: 'agent', ag, spec: specialitesMap[sid] }));
     });
     group.agentsDirect.forEach(ag => rows.push({ type: 'agent', ag, spec: null }));
-    (cumulsCustom?.[cellule.id] || []).forEach(cfg => rows.push({ type: 'cumul-custom', cellule, cfg }));
+    if (hasAgents) {
+      (cumulsCustom?.[cellule.id] || []).forEach(cfg => rows.push({ type: 'cumul-custom', cellule, cfg }));
+    }
   });
 
   function isHighlighted(agentId, dateStr) {
@@ -238,7 +242,7 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
           </div>
           <div style={{ flex: 1, fontWeight: 700, fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', overflow: 'hidden', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, paddingRight: 4 }}>
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.cellule.nom}</span>
-            {canManageCumuls && <button
+            {canManageCumuls && row.hasAgents && <button
               title="Configurer les lignes de cumul"
               onClick={e => { e.stopPropagation(); setCumulModal(row.cellule); }}
               style={{
@@ -252,7 +256,7 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
             >
               ⊕
             </button>}
-            {canViewStats && <button
+            {canViewStats && row.hasAgents && <button
               title="Statistiques de la cellule"
               onClick={e => { e.stopPropagation(); setStatsModal(row.cellule); }}
               style={{
@@ -547,11 +551,18 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
                       padding: 0,
                       ...(isFirst ? { borderLeft: '2px solid var(--border-light)' } : {}),
                     }}>
-                      <div style={{ lineHeight: 1.2 }}>
-                        <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{weekday}</div>
-                        <div style={{ fontSize: 12, fontWeight: 700 }}>{day}</div>
-                        <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{month}</div>
-                      </div>
+                      {isTablet ? (
+                        <div style={{ fontSize: 9, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>
+                          <span style={{ fontWeight: 400, opacity: 0.55, fontSize: 8 }}>{weekday.slice(0, 1).toUpperCase()}</span>
+                          {day}
+                        </div>
+                      ) : (
+                        <div style={{ lineHeight: 1.2 }}>
+                          <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{weekday}</div>
+                          <div style={{ fontSize: 12, fontWeight: 700 }}>{day}</div>
+                          <div style={{ fontSize: 8, opacity: 0.65, fontFamily: 'var(--font-ui)' }}>{month}</div>
+                        </div>
+                      )}
                     </th>
                   );
                 })}
