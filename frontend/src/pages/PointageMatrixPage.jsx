@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import PointageMatrix from '../components/matrix/PointageMatrix.jsx';
 import PointageModal from '../components/matrix/PointageModal.jsx';
+import ChatPanel, { buildMatrixContext } from '../components/ChatPanel.jsx';
 
 // Formate en YYYY-MM-DD en heure locale (évite le décalage UTC)
 function formatDate(d) {
@@ -24,8 +25,9 @@ function parseLocal(str) {
 }
 
 export default function PointageMatrixPage() {
-  const { api, can, profile, isAgent, isAdmin, isAdminService, isAssistantRH } = useAuth();
+  const { api, can, profile, isAgent, isAdmin, isAdminService, isAssistantRH, isViewer } = useAuth();
   const canManageCumuls = isAdmin || isAdminService;
+  const canUseChat = isAdmin || isAdminService || isViewer || isAssistantRH;
   const { selectedService, selectedCellule } = useOutletContext();
 
   const [duree, setDuree]         = useState(31);   // 31 ou 62 jours
@@ -215,6 +217,11 @@ export default function PointageMatrixPage() {
     }
   }
 
+  const matrixContext = useMemo(
+    () => buildMatrixContext(filteredData, selectedService, selectedCellule, dateDebut, dateFin),
+    [filteredData, selectedService, selectedCellule, dateDebut, dateFin]
+  );
+
   const modalResetProps = useMemo(() => {
     if (!pointageModal || !matrixData) return { showReset: false };
     const assignment = matrixData.agents.find(a => a.agent.id === pointageModal.agent.id);
@@ -328,6 +335,8 @@ export default function PointageMatrixPage() {
           onRefresh={loadMatrix}
         />
       )}
+
+      {canUseChat && <ChatPanel matrixContext={matrixContext} />}
     </div>
   );
 }
