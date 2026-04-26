@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { fmtDate } from "../utils/date.js";
 
 export default function ConvocationsPage() {
   const { api, can, profile } = useAuth();
@@ -76,7 +77,7 @@ export default function ConvocationsPage() {
         <tbody>
           {convocations.map((c) => (
             <tr key={c.id}>
-              <td style={{ fontFamily: "var(--font-mono)" }}>{c.date}</td>
+              <td style={{ fontFamily: "var(--font-mono)" }}>{fmtDate(c.date)}</td>
               <td>
                 {c.agents?.nom} {c.agents?.prenom}
               </td>

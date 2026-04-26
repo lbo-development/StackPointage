@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { fmtDate as fmtShortDate } from '../utils/date.js';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -147,7 +148,7 @@ export default function JoursFeriesPage() {
                 {feries.map(f => (
                   <tr key={f.id} style={!f.is_active ? { opacity: 0.45 } : undefined}>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'nowrap' }}>
-                      <span style={{ fontWeight: 600 }}>{f.date}</span>
+                      <span style={{ fontWeight: 600 }}>{fmtShortDate(f.date)}</span>
                       <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
                         {new Date(f.date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long' })}
                       </span>

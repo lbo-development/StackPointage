@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import OrdreAgentsModal from '../components/matrix/OrdreAgentsModal.jsx';
+import { fmtDate } from '../utils/date.js';
 
 const CONTRAT_COLORS = {
   CDI:    { bg: '#dcfce7', text: '#15803d', border: '#86efac' },
@@ -160,6 +161,7 @@ export default function AgentsPage() {
                 <th>Contrat</th>
                 <th>Spécialité</th>
                 <th>Roulement</th>
+                <th>Date réf.</th>
                 <th>Depuis</th>
                 <th>Actions</th>
               </tr>
@@ -169,7 +171,7 @@ export default function AgentsPage() {
                 if (row.type === 'header') {
                   return (
                     <tr key={`hdr-${row.celluleId}`}>
-                      <td colSpan={11} style={{
+                      <td colSpan={12} style={{
                         padding: '6px 12px',
                         background: 'var(--bg-panel)',
                         borderTop: i === 0 ? 'none' : '2px solid var(--border)',
@@ -224,7 +226,8 @@ export default function AgentsPage() {
                     </td>
                     <td>{a.specialites?.nom || '—'}</td>
                     <td>{a.roulements?.nom || '—'}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{a.date_debut}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(a.date_debut_reference || a.roulements?.date_debut_reference)}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{fmtDate(a.date_debut)}</td>
                     <td style={{ display: 'flex', gap: 6 }}>
                       {can('edit_agents') && (
                         <button className="btn btn-sm" onClick={() => { setEditAgent(a); setShowModal(true); }}>

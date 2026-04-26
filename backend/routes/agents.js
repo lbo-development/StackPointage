@@ -17,7 +17,7 @@ router.get('/', requireServiceScope, async (req, res) => {
         agents(*),
         cellules(nom, code, couleur, ordre),
         specialites(nom, code, couleur),
-        roulements(nom)
+        roulements(nom, date_debut_reference)
       `);
 
     if (serviceId) query = query.eq('service_id', serviceId);
