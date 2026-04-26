@@ -14,7 +14,7 @@ CREATE TABLE profiles (
   email TEXT NOT NULL UNIQUE,
   nom TEXT NOT NULL,
   prenom TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('admin_app','admin_service','pointeur','assistant_rh','agent')),
+  role TEXT NOT NULL CHECK (role IN ('admin_app','admin_service','pointeur','assistant_rh','agent','viewer')),
   service_id UUID,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),

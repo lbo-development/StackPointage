@@ -74,7 +74,7 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, mode = 'reel') 
   // 8. Convocations
   const { data: convocations } = await supabase
     .from('convocations')
-    .select('agent_id, date, type, intitule')
+    .select('id, agent_id, date, type, intitule, statut, commentaire')
     .in('agent_id', agentIds)
     .gte('date', dateDebut)
     .lte('date', dateFin);
@@ -162,12 +162,38 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, mode = 'reel') 
   // 11. Cumuls par cellule + spécialité + type
   const cumuls = computeCumuls(agentsMatrix, dates, codesMap);
 
+  // 12. Lignes de cumul configurables par cellule
+  const celluleIds = cellules.map(c => c.id);
+  const { data: cumulConfigs } = await supabase
+    .from('cellule_cumuls')
+    .select('*, specialites(id, nom)')
+    .in('cellule_id', celluleIds)
+    .eq('is_active', true)
+    .order('ordre');
+
+  const cumulsCustom = {};
+  for (const cfg of (cumulConfigs || [])) {
+    if (!cumulsCustom[cfg.cellule_id]) cumulsCustom[cfg.cellule_id] = [];
+    const dailyCounts = {};
+    dates.forEach(dateStr => {
+      dailyCounts[dateStr] = agentsMatrix.filter(ag =>
+        ag.cellule_id === cfg.cellule_id &&
+        (!cfg.specialite_id || ag.specialite_id === cfg.specialite_id)
+      ).filter(ag => {
+        const entry = ag.reel[dateStr] || ag.theorique[dateStr];
+        return entry?.code === cfg.code_pointage;
+      }).length;
+    });
+    cumulsCustom[cfg.cellule_id].push({ ...cfg, dailyCounts });
+  }
+
   return {
     dates,
     cellules,
     specialites: specialites || [],
     agents: agentsMatrix,
     cumuls,
+    cumulsCustom,
     feries: [...feriesSet],
     codesMap
   };

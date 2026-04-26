@@ -25,8 +25,8 @@ export function requireServiceScope(req, res, next) {
   const { profile } = req;
   if (!profile) return res.status(401).json({ error: 'Non authentifié' });
 
-  // admin_app : accès total
-  if (profile.role === 'admin_app') return next();
+  // admin_app, viewer, assistant_rh : accès total (écriture bloquée côté requireRole pour viewer/assistant_rh)
+  if (['admin_app', 'viewer', 'assistant_rh'].includes(profile.role)) return next();
 
   const serviceId = req.params.serviceId || req.query.service_id || req.body.service_id;
 

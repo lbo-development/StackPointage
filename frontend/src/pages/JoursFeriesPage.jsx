@@ -13,7 +13,7 @@ function fmtDate(str) {
 }
 
 export default function JoursFeriesPage() {
-  const { api } = useAuth();
+  const { api, isViewer } = useAuth();
   const [annee, setAnnee]       = useState(CURRENT_YEAR);
   const [feries, setFeries]     = useState([]);
   const [loading, setLoading]   = useState(false);
@@ -95,14 +95,16 @@ export default function JoursFeriesPage() {
           </select>
         </label>
 
-        <button
-          className="btn btn-sm"
-          onClick={handleGenerer}
-          disabled={generating}
-          title={`Calculer et insérer les 11 jours fériés français pour ${annee}`}
-        >
-          {generating ? '…' : '⚙'} Générer {annee}
-        </button>
+        {!isViewer && (
+          <button
+            className="btn btn-sm"
+            onClick={handleGenerer}
+            disabled={generating}
+            title={`Calculer et insérer les 11 jours fériés français pour ${annee}`}
+          >
+            {generating ? '…' : '⚙'} Générer {annee}
+          </button>
+        )}
 
         {feries.length > 0 && (
           <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
@@ -123,9 +125,11 @@ export default function JoursFeriesPage() {
                 <div style={{ color: 'var(--text-muted)', marginBottom: 12 }}>
                   Aucun jour férié pour {annee}
                 </div>
-                <button className="btn btn-primary" onClick={handleGenerer} disabled={generating}>
-                  {generating ? '…' : '⚙'} Générer les jours fériés {annee}
-                </button>
+                {!isViewer && (
+                  <button className="btn btn-primary" onClick={handleGenerer} disabled={generating}>
+                    {generating ? '…' : '⚙'} Générer les jours fériés {annee}
+                  </button>
+                )}
               </div>
             </div>
           )
@@ -151,12 +155,13 @@ export default function JoursFeriesPage() {
                     <td style={{ fontWeight: 500 }}>{f.libelle || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>—</span>}</td>
                     <td style={{ textAlign: 'center' }}>
                       <button
-                        onClick={() => handleToggleActif(f)}
+                        onClick={() => !isViewer && handleToggleActif(f)}
+                        disabled={isViewer}
                         style={{
-                          background: 'none', border: 'none', cursor: 'pointer',
+                          background: 'none', border: 'none', cursor: isViewer ? 'default' : 'pointer',
                           fontSize: 16, lineHeight: 1, padding: 2,
                         }}
-                        title={f.is_active ? 'Désactiver' : 'Activer'}
+                        title={isViewer ? '' : (f.is_active ? 'Désactiver' : 'Activer')}
                       >
                         {f.is_active
                           ? <span style={{ color: '#22c55e' }}>●</span>
@@ -164,16 +169,18 @@ export default function JoursFeriesPage() {
                       </button>
                     </td>
                     <td style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-sm" onClick={() => setEditModal({ ferie: f })}>
-                        Éditer
-                      </button>
-                      <button
-                        className="btn btn-sm"
-                        style={{ color: 'var(--color-danger, #ef4444)' }}
-                        onClick={() => handleDelete(f)}
-                      >
-                        ✕
-                      </button>
+                      {!isViewer && <>
+                        <button className="btn btn-sm" onClick={() => setEditModal({ ferie: f })}>
+                          Éditer
+                        </button>
+                        <button
+                          className="btn btn-sm"
+                          style={{ color: 'var(--color-danger, #ef4444)' }}
+                          onClick={() => handleDelete(f)}
+                        >
+                          ✕
+                        </button>
+                      </>}
                     </td>
                   </tr>
                 ))}

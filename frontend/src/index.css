@@ -561,7 +561,7 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
 .pointage-cell.has-comment::after { display: block; }
 
 /* Cellule convocation */
-.pointage-cell.has-convoc { outline: 2px dashed var(--info); }
+.pointage-cell.has-convoc { }
 
 /* Sélection drag */
 .pointage-cell.drag-selected {

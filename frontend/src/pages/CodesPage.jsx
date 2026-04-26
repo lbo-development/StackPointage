@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 const TYPES = ['Présence','Repos','Congé','Maladie','Absence','Autre absence','Autre présence','Autre'];
 
 export default function CodesPage() {
-  const { api } = useAuth();
+  const { api, isViewer } = useAuth();
   const { selectedService } = useOutletContext();
   const [codes, setCodes] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -71,7 +71,7 @@ export default function CodesPage() {
             value={filterLocked}
             onChange={setFilterLocked}
           />
-          <button className="btn btn-primary" onClick={() => { setEditCode(null); setShowModal(true); }}>+ Nouveau code</button>
+          {!isViewer && <button className="btn btn-primary" onClick={() => { setEditCode(null); setShowModal(true); }}>+ Nouveau code</button>}
         </div>
       </div>
 
@@ -94,8 +94,8 @@ export default function CodesPage() {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {items.map(c => (
                 <div key={c.id}
-                  style={{ background: c.bg_color, color: c.text_color, borderRadius: 6, padding: '10px 14px', minWidth: 120, border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}
-                  onClick={() => { setEditCode(c); setShowModal(true); }}
+                  style={{ background: c.bg_color, color: c.text_color, borderRadius: 6, padding: '10px 14px', minWidth: 120, border: '1px solid rgba(255,255,255,0.1)', cursor: isViewer ? 'default' : 'pointer' }}
+                  onClick={() => { if (!isViewer) { setEditCode(c); setShowModal(true); } }}
                 >
                   <div style={{ fontWeight: 800, fontSize: 18, fontFamily: 'var(--font-mono)' }}>{c.code}</div>
                   <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>{c.libelle}</div>

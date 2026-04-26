@@ -105,27 +105,28 @@ export function AuthProvider({ children }) {
     if (!profile) return false;
     const role = profile.role;
     const perms = {
-      'edit_pointage': ['admin_app', 'admin_service', 'pointeur'],
-      'edit_agents': ['admin_app', 'admin_service'],
-      'edit_roulements': ['admin_app', 'admin_service'],
-      'edit_codes': ['admin_app', 'admin_service'],
-      'edit_convocations': ['admin_app', 'admin_service', 'pointeur', 'assistant_rh'],
-      'read_only': ['agent'],
-      'admin': ['admin_app']
+      'edit_pointage':    ['admin_app', 'admin_service', 'pointeur'],
+      'edit_agents':      ['admin_app', 'admin_service'],
+      'edit_roulements':  ['admin_app', 'admin_service'],
+      'edit_codes':       ['admin_app', 'admin_service'],
+      'edit_convocations':['admin_app', 'admin_service', 'pointeur', 'assistant_rh'],
+      'read_only':        ['agent', 'viewer'],
+      'admin':            ['admin_app'],
     };
     return perms[action]?.includes(role) ?? false;
   }, [profile]);
 
-  const isAdmin = profile?.role === 'admin_app';
+  const isAdmin       = profile?.role === 'admin_app';
   const isAdminService = profile?.role === 'admin_service';
-  const isPointeur = profile?.role === 'pointeur';
+  const isPointeur    = profile?.role === 'pointeur';
   const isAssistantRH = profile?.role === 'assistant_rh';
-  const isAgent = profile?.role === 'agent';
+  const isAgent       = profile?.role === 'agent';
+  const isViewer      = profile?.role === 'viewer';
 
   return (
     <AuthContext.Provider value={{
       session, profile, loading, api, login, logout, can,
-      isAdmin, isAdminService, isPointeur, isAssistantRH, isAgent,
+      isAdmin, isAdminService, isPointeur, isAssistantRH, isAgent, isViewer,
       token: session?.access_token
     }}>
       {children}

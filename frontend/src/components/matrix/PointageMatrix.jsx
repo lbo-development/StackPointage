@@ -12,7 +12,7 @@ const COL_W    = {
 const FROZEN_W = COL_W.indicator + COL_W.nom + COL_W.prenom;
 const HEAD_H1  = 24;  // ligne mois
 const HEAD_H2  = 50;  // ligne dates
-const ROW_H    = { 'cellule-header': 27, 'specialite-header': 22, agent: 26, cumuls: 22 };
+const ROW_H    = { 'cellule-header': 27, 'specialite-header': 22, agent: 26, 'cumul-custom': 22 };
 
 function getDayInfo(dateStr, feriesSet) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -33,13 +33,14 @@ function normalizeRange(s) {
     : { agentId: s.agentId, startDate: s.endDate,   endDate: s.startDate };
 }
 
-export default function PointageMatrix({ data, mode, canEdit, onRightClick, serviceId, dateDebut, dateFin }) {
-  const { dates, cellules, specialites, agents, cumuls, feries, codesMap } = data;
+export default function PointageMatrix({ data, mode, canEdit, canViewStats = true, canManageCumuls = false, onRightClick, onDblClickCell, onRefreshMatrix, serviceId, dateDebut, dateFin }) {
+  const { dates, cellules, specialites, agents, cumuls, cumulsCustom, feries, codesMap } = data;
   const feriesSet = useMemo(() => new Set(feries || []), [feries]);
 
-  const [drag, setDrag]           = useState(null);
-  const [selection, setSelection] = useState(null);
-  const [statsModal, setStatsModal] = useState(null); // { cellule }
+  const [drag, setDrag]               = useState(null);
+  const [selection, setSelection]     = useState(null);
+  const [statsModal, setStatsModal]   = useState(null);
+  const [cumulModal, setCumulModal]   = useState(null); // cellule
   const [spacerH, setSpacerH]     = useState(0);
 
   const leftBodyRef    = useRef(null);
@@ -144,7 +145,7 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick, serv
       sAgents.forEach(ag => rows.push({ type: 'agent', ag, spec: specialitesMap[sid] }));
     });
     group.agentsDirect.forEach(ag => rows.push({ type: 'agent', ag, spec: null }));
-    rows.push({ type: 'cumuls', cellule });
+    (cumulsCustom?.[cellule.id] || []).forEach(cfg => rows.push({ type: 'cumul-custom', cellule, cfg }));
   });
 
   function isHighlighted(agentId, dateStr) {
@@ -237,7 +238,21 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick, serv
           </div>
           <div style={{ flex: 1, fontWeight: 700, fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', overflow: 'hidden', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, paddingRight: 4 }}>
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.cellule.nom}</span>
-            <button
+            {canManageCumuls && <button
+              title="Configurer les lignes de cumul"
+              onClick={e => { e.stopPropagation(); setCumulModal(row.cellule); }}
+              style={{
+                flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer',
+                padding: '1px 3px', borderRadius: 3, color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', lineHeight: 1, opacity: 0.7,
+                fontSize: 13,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.background = 'none'; }}
+            >
+              ⊕
+            </button>}
+            {canViewStats && <button
               title="Statistiques de la cellule"
               onClick={e => { e.stopPropagation(); setStatsModal(row.cellule); }}
               style={{
@@ -254,7 +269,7 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick, serv
                 <rect x="5" y="4" width="3" height="9" rx="1" />
                 <rect x="10" y="1" width="3" height="12" rx="1" />
               </svg>
-            </button>
+            </button>}
           </div>
         </div>
       );
@@ -272,10 +287,23 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick, serv
       );
     }
 
-    if (row.type === 'cumuls') {
+    if (row.type === 'cumul-custom') {
+      const { cfg } = row;
+      const label = cfg.libelle || cfg.code_pointage;
+      const specNom = cfg.specialites?.nom || 'Toutes';
       return (
-        <div key={`L-cum-${row.cellule.id}`} style={{ ...base, background: 'var(--bg-surface)', justifyContent: 'flex-end' }}>
-          <span style={{ fontSize: 10, fontStyle: 'italic', color: 'var(--text-muted)', padding: '0 8px' }}>Cumuls ›</span>
+        <div key={`L-cc-${cfg.id}`} style={{ ...base, background: 'var(--bg-surface)', borderTop: '1px solid var(--border-grid)', borderBottom: '1px solid var(--border-grid)' }}>
+          <div style={{ width: COL_W.indicator, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.couleur || 'var(--accent)', flexShrink: 0 }} />
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden', paddingRight: 4 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flex: 1 }}>
+              {label}<span style={{ opacity: 0.6 }}> · {specNom}</span>
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: cfg.couleur || 'var(--accent)', flexShrink: 0, opacity: 0.8 }}>
+              {cfg.code_pointage}
+            </span>
+          </div>
         </div>
       );
     }
@@ -325,21 +353,32 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick, serv
       );
     }
 
-    if (row.type === 'cumuls') {
-      const cellCumuls = cumuls[row.cellule.id] || {};
+    if (row.type === 'cumul-custom') {
+      const { cfg } = row;
       return (
-        <tr key={`R-cum-${row.cellule.id}`} style={{ height: h }}>
+        <tr key={`R-cc-${cfg.id}`} style={{ height: h }}>
           {dates.map(dateStr => {
-            const c = cellCumuls[dateStr] || {};
-            const parts = [];
-            if (c.matin)      parts.push(`M${c.matin}`);
-            if (c.apres_midi) parts.push(`A${c.apres_midi}`);
-            if (c.nuit)       parts.push(`N${c.nuit}`);
-            if (c.journee)    parts.push(`J${c.journee}`);
+            const count = cfg.dailyCounts?.[dateStr] || 0;
+            const isAlert = cfg.seuil_alerte != null && (() => {
+              switch (cfg.seuil_operateur || '<=') {
+                case '>':  return count >  cfg.seuil_alerte;
+                case '<':  return count <  cfg.seuil_alerte;
+                case '=':  return count === cfg.seuil_alerte;
+                case '>=': return count >= cfg.seuil_alerte;
+                case '<=': return count <= cfg.seuil_alerte;
+                default:   return false;
+              }
+            })();
             return (
-              <td key={dateStr} style={{ background: 'var(--bg-surface)', fontSize: 10, textAlign: 'center', color: 'var(--text-muted)', padding: '0 2px', height: h, maxHeight: h }}
-                title={`M:${c.matin||0} AM:${c.apres_midi||0} N:${c.nuit||0} J:${c.journee||0}`}>
-                {parts.join(' ')}
+              <td key={dateStr} style={{
+                background: isAlert ? 'rgba(239,68,68,0.08)' : 'var(--bg-surface)',
+                fontSize: 11, textAlign: 'center', fontFamily: 'var(--font-mono)',
+                color: count > 0 ? (isAlert ? '#ef4444' : (cfg.couleur || 'var(--accent)')) : 'transparent',
+                fontWeight: 700,
+                border: '1px solid var(--border-grid)',
+                height: h, maxHeight: h,
+              }}>
+                {count > 0 ? count : ''}
               </td>
             );
           })}
@@ -389,6 +428,7 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick, serv
               key={dateStr}
               className={cls}
               style={{
+                position: 'relative',
                 background: highlighted ? undefined : cellBg,
                 color: highlighted ? undefined : (code?.text_color || 'inherit'),
                 cursor: canEdit && !isLocked ? 'cell' : 'default',
@@ -406,6 +446,13 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick, serv
                   setDrag(prev => ({ ...prev, endDate: dateStr }));
                 }
               }}
+              onDoubleClick={e => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDrag(null);
+                setSelection(null);
+                if (onDblClickCell) onDblClickCell(ag, dateStr, ag.convocations?.[dateStr] || []);
+              }}
               data-date={dateStr}
               data-agentid={String(agent.id)}
               onContextMenu={e => handleContextMenu(e, ag, dateStr, isLocked)}
@@ -417,6 +464,13 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick, serv
                 {entry?.code || (isFerie ? 'F' : '')}
                 {isLocked && <span style={{ fontSize: 7 }}>🔒</span>}
               </span>
+              {hasConvoc && (
+                <span style={{
+                  position: 'absolute', bottom: 2, left: 2,
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: '#22c55e', pointerEvents: 'none',
+                }} />
+              )}
             </td>
           );
         })}
@@ -541,7 +595,199 @@ export default function PointageMatrix({ data, mode, canEdit, onRightClick, serv
         onClose={() => setStatsModal(null)}
       />
     )}
+
+    {cumulModal && (
+      <CumulConfigModal
+        cellule={cumulModal}
+        specialites={specialites}
+        codesMap={codesMap}
+        onClose={() => setCumulModal(null)}
+        onSaved={() => { setCumulModal(null); onRefreshMatrix?.(); }}
+      />
+    )}
   </>);
+}
+
+// ─── Modale configuration des lignes de cumul ────────────────────────────────
+
+function CumulConfigModal({ cellule, specialites, codesMap, onClose, onSaved }) {
+  const { api } = useAuth();
+  const [configs, setConfigs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // null=liste, {}=nouveau, {id,...}=edit
+  const [form, setForm] = useState({ libelle: '', specialite_id: '', code_pointage: '', couleur: '#8dc63f', ordre: 0 });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.get(`/cellule-cumuls?cellule_id=${cellule.id}`)
+      .then(setConfigs).catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [cellule.id]);
+
+  const codesList = Object.values(codesMap).sort((a, b) => a.code.localeCompare(b.code));
+
+  function startCreate() {
+    setForm({ libelle: '', specialite_id: '', code_pointage: codesList[0]?.code || '', couleur: '#8dc63f', ordre: configs.length, seuil_alerte: '', seuil_operateur: '<=' });
+    setEditing({});
+    setError('');
+  }
+
+  function startEdit(c) {
+    setForm({ libelle: c.libelle || '', specialite_id: c.specialite_id || '', code_pointage: c.code_pointage, couleur: c.couleur || '#8dc63f', ordre: c.ordre ?? 0, seuil_alerte: c.seuil_alerte ?? '', seuil_operateur: c.seuil_operateur || '<=' });
+    setEditing(c);
+    setError('');
+  }
+
+  async function handleSave() {
+    if (!form.code_pointage) { setError('Le code est requis'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const body = { ...form, specialite_id: form.specialite_id || null, seuil_alerte: form.seuil_alerte !== '' ? Number(form.seuil_alerte) : null, seuil_operateur: form.seuil_operateur || '<=', cellule_id: cellule.id };
+      if (editing.id) {
+        const updated = await api.put(`/cellule-cumuls/${editing.id}`, body);
+        setConfigs(prev => prev.map(c => c.id === editing.id ? updated : c));
+      } else {
+        const created = await api.post('/cellule-cumuls', body);
+        setConfigs(prev => [...prev, created]);
+      }
+      setEditing(null);
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm('Supprimer cette ligne de cumul ?')) return;
+    try {
+      await api.delete(`/cellule-cumuls/${id}`);
+      setConfigs(prev => prev.filter(c => c.id !== id));
+      onSaved();
+    } catch (e) {
+      alert('Erreur : ' + e.message);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 500, width: '95vw' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">
+            Lignes de cumul
+            <span style={{ fontWeight: 400, marginLeft: 8, fontSize: 13, color: 'var(--text-muted)' }}>{cellule.nom}</span>
+          </span>
+          <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {loading && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Chargement…</div>}
+
+          {!loading && editing === null && (
+            <>
+              {configs.length === 0 && (
+                <div style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic' }}>
+                  Aucune ligne de cumul configurée
+                </div>
+              )}
+              {configs.map(c => (
+                <div key={c.id} style={{
+                  padding: '8px 10px', background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)', borderRadius: 6, fontSize: 12,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: c.couleur || 'var(--accent)', flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 600 }}>{c.libelle || c.code_pointage}</span>
+                    {c.specialites && <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>· {c.specialites.nom}</span>}
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginLeft: 6 }}>{c.code_pointage}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button className="btn btn-sm" onClick={() => startEdit(c)}>Éditer</button>
+                    <button className="btn btn-sm" style={{ color: '#f87171' }} onClick={() => handleDelete(c.id)}>✕</button>
+                  </div>
+                </div>
+              ))}
+              <button className="btn btn-primary" onClick={startCreate} style={{ marginTop: 4 }}>
+                + Ajouter une ligne de cumul
+              </button>
+            </>
+          )}
+
+          {!loading && editing !== null && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="form-group">
+                <label className="form-label">Libellé</label>
+                <input className="form-control" value={form.libelle} onChange={e => setForm(p => ({ ...p, libelle: e.target.value }))} placeholder="Ex : Chef de groupe JN" autoFocus />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Spécialité</label>
+                <select className="form-control" value={form.specialite_id} onChange={e => setForm(p => ({ ...p, specialite_id: e.target.value }))}>
+                  <option value="">Toutes les spécialités</option>
+                  {(specialites || []).map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Code à compter *</label>
+                <select className="form-control" value={form.code_pointage} onChange={e => setForm(p => ({ ...p, code_pointage: e.target.value }))}>
+                  <option value="">— Sélectionner —</option>
+                  {codesList.map(c => (
+                    <option key={c.code} value={c.code}>{c.code} — {c.libelle}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Couleur</label>
+                  <input type="color" className="form-control" value={form.couleur} onChange={e => setForm(p => ({ ...p, couleur: e.target.value }))} style={{ height: 36, padding: 2, cursor: 'pointer' }} />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Ordre</label>
+                  <input type="number" className="form-control" value={form.ordre} onChange={e => setForm(p => ({ ...p, ordre: Number(e.target.value) }))} min={0} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Seuil d'alerte</label>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Cumul</span>
+                  <select
+                    className="form-control"
+                    value={form.seuil_operateur}
+                    onChange={e => setForm(p => ({ ...p, seuil_operateur: e.target.value }))}
+                    style={{ width: 70, flexShrink: 0, fontFamily: 'var(--font-mono)', textAlign: 'center' }}
+                  >
+                    {['>', '<', '=', '>=', '<='].map(op => <option key={op} value={op}>{op}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={form.seuil_alerte}
+                    onChange={e => setForm(p => ({ ...p, seuil_alerte: e.target.value }))}
+                    min={0}
+                    placeholder="Valeur"
+                    style={{ width: 90 }}
+                  />
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Optionnel — si la condition est remplie, le cumul s'affiche en rouge.
+                </div>
+              </div>
+              {error && <div style={{ fontSize: 12, color: '#f87171' }}>{error}</div>}
+              <div className="modal-footer">
+                <button className="btn" onClick={() => setEditing(null)}>Annuler</button>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Enregistrement…' : editing.id ? 'Enregistrer' : 'Créer'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Donut chart ─────────────────────────────────────────────────────────────

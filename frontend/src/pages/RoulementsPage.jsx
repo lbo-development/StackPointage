@@ -45,7 +45,7 @@ function calcRoulementCode(roulement, dateStr) {
 }
 
 export default function RoulementsPage() {
-  const { api, isAdmin } = useAuth();
+  const { api, isAdmin, isViewer } = useAuth();
   const { selectedService } = useOutletContext();
   const [roulements, setRoulements] = useState([]);
   const [codes, setCodes] = useState([]);
@@ -98,7 +98,7 @@ export default function RoulementsPage() {
     <div className="page-wrapper">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 className="page-title">Roulements {selectedService ? `— ${selectedService.nom}` : ''}</h1>
-        <button className="btn btn-primary" onClick={() => { setEditRoulement(null); setShowModal(true); }}>+ Nouveau roulement</button>
+        {!isViewer && <button className="btn btn-primary" onClick={() => { setEditRoulement(null); setShowModal(true); }}>+ Nouveau roulement</button>}
       </div>
 
       {loading ? <div className="loading-overlay"><div className="loading-spinner" /></div> : (
@@ -126,7 +126,7 @@ export default function RoulementsPage() {
                         {isGlobal && ' · Commun à tous les services'}
                       </div>
                     </div>
-                    <button className="btn btn-sm" onClick={() => { setEditRoulement(r); setShowModal(true); }}>Éditer</button>
+                    {!isViewer && <button className="btn btn-sm" onClick={() => { setEditRoulement(r); setShowModal(true); }}>Éditer</button>}
                   </div>
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>

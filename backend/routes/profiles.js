@@ -118,9 +118,20 @@ router.put('/:id', async (req, res) => {
 
   // Mettre à jour le lien agent si fourni dans la requête
   if ('agent_id' in req.body) {
-    await supabase.from('agents').update({ profile_id: null }).eq('profile_id', id);
+    // Délier l'ancien agent lié à ce profil
+    const { error: unlinkErr } = await supabase
+      .from('agents')
+      .update({ profile_id: null })
+      .eq('profile_id', id);
+    if (unlinkErr) return res.status(500).json({ error: `Déliage agent: ${unlinkErr.message}` });
+
+    // Lier le nouvel agent
     if (agent_id) {
-      await supabase.from('agents').update({ profile_id: id }).eq('id', agent_id);
+      const { error: linkErr } = await supabase
+        .from('agents')
+        .update({ profile_id: id })
+        .eq('id', agent_id);
+      if (linkErr) return res.status(500).json({ error: `Liaison agent: ${linkErr.message}` });
     }
   }
 

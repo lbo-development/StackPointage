@@ -24,7 +24,8 @@ function parseLocal(str) {
 }
 
 export default function PointageMatrixPage() {
-  const { api, can, profile } = useAuth();
+  const { api, can, profile, isAgent, isAdmin, isAdminService, isAssistantRH } = useAuth();
+  const canManageCumuls = isAdminService;
   const { selectedService, selectedCellule } = useOutletContext();
 
   const [duree, setDuree]         = useState(31);   // 31 ou 62 jours
@@ -42,6 +43,7 @@ export default function PointageMatrixPage() {
   const [error, setError]           = useState('');
 
   const [pointageModal, setPointageModal] = useState(null);
+  const [convocationModal, setConvocationModal] = useState(null); // { ag, dateStr, convocations }
 
   const loadMatrix = useCallback(async () => {
     const serviceId = selectedService?.id || profile?.service_id;
@@ -119,6 +121,11 @@ export default function PointageMatrixPage() {
     setPointageModal({ agent, dateDebut, dateFin, currentCode, currentCommentaire });
   }
 
+  // Double-clic sur une cellule → modale convocations
+  function handleDblClickCell(ag, dateStr, convocations) {
+    setConvocationModal({ ag, dateStr, convocations });
+  }
+
   async function handleResetPointage({ agentId, dateDebut, dateFin }) {
     try {
       const assignment = matrixData?.agents.find(a => a.agent.id === agentId);
@@ -163,8 +170,8 @@ export default function PointageMatrixPage() {
           // Code réel existant : verrouillé ou FE sur une plage → on ne touche pas
           if (reelEntry.is_locked) continue;
           if (isRange && reelEntry.code === 'FE') continue;
-          // Nouveau code == code théorique → supprimer le réel (le théorique reprend)
-          if (theoriqueEntry && code === theoriqueEntry.code) {
+          // Nouveau code == code théorique et pas de commentaire → supprimer le réel (le théorique reprend)
+          if (theoriqueEntry && code === theoriqueEntry.code && !commentaire) {
             if (reelEntry.id) toDelete.push(reelEntry.id);
           } else {
             toSave.push(date);
@@ -175,8 +182,8 @@ export default function PointageMatrixPage() {
             const codeObj = codesMap[theoriqueEntry.code];
             // Code théorique verrouillé → on ne touche pas
             if (codeObj?.is_locked) continue;
-            // Nouveau code == code théorique → rien à faire
-            if (code === theoriqueEntry.code) continue;
+            // Nouveau code == code théorique et pas de commentaire → rien à faire
+            if (code === theoriqueEntry.code && !commentaire) continue;
           }
           toSave.push(date);
         }
@@ -279,7 +286,11 @@ export default function PointageMatrixPage() {
           data={filteredData}
           mode={mode}
           canEdit={can('edit_pointage')}
+          canViewStats={!isAgent}
+          canManageCumuls={canManageCumuls}
           onRightClick={handleRightClick}
+          onDblClickCell={handleDblClickCell}
+          onRefreshMatrix={loadMatrix}
           serviceId={selectedService?.id || profile?.service_id}
           dateDebut={dateDebut}
           dateFin={dateFin}
@@ -303,6 +314,196 @@ export default function PointageMatrixPage() {
           onClose={() => setPointageModal(null)}
         />
       )}
+
+      {convocationModal && (
+        <ConvocationModal
+          ag={convocationModal.ag}
+          dateStr={convocationModal.dateStr}
+          initialConvocs={convocationModal.convocations}
+          serviceId={selectedService?.id || profile?.service_id}
+          api={api}
+          canEdit={can('edit_convocations')}
+          canDelete={isAdmin || isAdminService || isAssistantRH}
+          onClose={() => setConvocationModal(null)}
+          onRefresh={loadMatrix}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Modale convocations ─────────────────────────────────────────────────────
+
+const CONVOC_TYPES = [
+  { value: 'disciplinaire', label: 'Direction'      },
+  { value: 'information',   label: 'Information'   },
+  { value: 'formation',     label: 'Formation'      },
+  { value: 'medical',       label: 'Médical'        },
+  { value: 'autre',         label: 'Autre'          },
+];
+const CONVOC_STATUTS = [
+  { value: '',          label: 'Aucun'    },
+  { value: 'planifiee', label: 'Planifié' },
+  { value: 'realisee',  label: 'Réalisé'  },
+  { value: 'annulee',   label: 'Annulée'  },
+];
+const TYPE_LABEL   = Object.fromEntries(CONVOC_TYPES.map(t => [t.value, t.label]));
+const STATUT_LABEL = Object.fromEntries(CONVOC_STATUTS.map(s => [s.value, s.label]));
+
+function ConvocationModal({ ag, dateStr, initialConvocs, serviceId, api, canEdit, canDelete, onClose, onRefresh }) {
+  const agent = ag.agent;
+  const [convocs, setConvocs] = useState(initialConvocs);
+  const [editing, setEditing] = useState(null); // null = liste, {} = nouveau, {id,...} = édition
+  const [form, setForm]       = useState({ type: 'Convocation', intitule: '', statut: 'planifié', commentaire: '' });
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState('');
+
+  const dateLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+
+  function startCreate() {
+    setForm({ type: 'disciplinaire', intitule: '', statut: '', commentaire: '' });
+    setEditing({});
+    setError('');
+  }
+
+  function startEdit(c) {
+    setForm({ type: c.type || 'disciplinaire', intitule: c.intitule || '', statut: c.statut || '', commentaire: c.commentaire || '' });
+    setEditing(c);
+    setError('');
+  }
+
+  async function handleSave() {
+    if (!form.intitule.trim()) { setError("L'intitulé est requis"); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const body = { ...form, statut: form.statut || null, agent_id: agent.id, date: dateStr, service_id: serviceId };
+      if (editing.id) {
+        const updated = await api.put(`/convocations/${editing.id}`, body);
+        setConvocs(prev => prev.map(c => c.id === editing.id ? { ...c, ...updated } : c));
+      } else {
+        const created = await api.post('/convocations', body);
+        setConvocs(prev => [...prev, created]);
+      }
+      setEditing(null);
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm('Supprimer cette convocation ?')) return;
+    try {
+      await api.delete(`/convocations/${id}`);
+      setConvocs(prev => prev.filter(c => c.id !== id));
+      onRefresh();
+    } catch (e) {
+      alert('Erreur : ' + e.message);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 440, width: '95vw' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">
+            {agent.prenom} {agent.nom}
+            <span style={{ fontWeight: 400, marginLeft: 6, fontSize: 13, color: 'var(--text-muted)' }}>{dateLabel}</span>
+          </span>
+          <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {editing === null ? (
+            <>
+              {convocs.length === 0 && (
+                <div style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic' }}>
+                  Aucune convocation enregistrée pour ce jour
+                </div>
+              )}
+              {convocs.map(c => (
+                <div key={c.id} style={{
+                  padding: '8px 10px', background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)', borderRadius: 6, fontSize: 12,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <span className="badge badge-blue" style={{ fontSize: 10 }}>{TYPE_LABEL[c.type] ?? c.type}</span>
+                        {c.statut && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{STATUT_LABEL[c.statut] ?? c.statut}</span>}
+                      </div>
+                      <div style={{ fontWeight: 600 }}>{c.intitule}</div>
+                      {c.commentaire && <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{c.commentaire}</div>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      {canEdit && (
+                        <button className="btn btn-sm" onClick={() => startEdit(c)}>Éditer</button>
+                      )}
+                      {canDelete && (
+                        <button className="btn btn-sm" style={{ color: '#f87171' }} onClick={() => handleDelete(c.id)}>✕</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {canEdit && (
+                <button className="btn btn-primary" onClick={startCreate} style={{ marginTop: 4 }}>
+                  + Ajouter une convocation
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="form-group">
+                  <label className="form-label">Type</label>
+                  <select className="form-control" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
+                    {CONVOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Intitulé *</label>
+                  <input
+                    className="form-control"
+                    value={form.intitule}
+                    onChange={e => setForm(p => ({ ...p, intitule: e.target.value }))}
+                    placeholder="Objet de la convocation"
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Statut</label>
+                  <select className="form-control" value={form.statut} onChange={e => setForm(p => ({ ...p, statut: e.target.value }))}>
+                    {CONVOC_STATUTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Commentaire</label>
+                  <textarea
+                    className="form-control"
+                    value={form.commentaire}
+                    onChange={e => setForm(p => ({ ...p, commentaire: e.target.value }))}
+                    rows={2}
+                    placeholder="Optionnel"
+                  />
+                </div>
+                {error && <div style={{ fontSize: 12, color: '#f87171' }}>{error}</div>}
+                <div className="modal-footer">
+                  <button className="btn" onClick={() => setEditing(null)}>Annuler</button>
+                  <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                    {saving ? 'Enregistrement…' : editing.id ? 'Enregistrer' : 'Créer'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

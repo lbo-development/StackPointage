@@ -3,15 +3,16 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 
 const ROLE_LABELS = {
-  admin_app: 'Admin App',
+  admin_app:     'Admin App',
   admin_service: 'Admin Service',
-  pointeur: 'Pointeur',
-  assistant_rh: 'Assistant RH',
-  agent: 'Agent'
+  pointeur:      'Pointeur',
+  assistant_rh:  'Assistant RH',
+  agent:         'Agent',
+  viewer:        'Lecteur',
 };
 
 export default function AppShell() {
-  const { profile, api, logout, isAdmin, isAdminService, isPointeur, isAssistantRH, isAgent } = useAuth();
+  const { profile, api, logout, isAdmin, isAdminService, isPointeur, isAssistantRH, isAgent, isViewer } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -43,20 +44,19 @@ export default function AppShell() {
   }, [api]);
 
   const navItems = [
-    { path: '/matrice', label: 'Matrice', icon: '▦', show: true },
-    { path: '/convocations', label: 'Convocations', icon: '✉', show: !isAgent },
-    { path: '/previsions', label: 'Prévisions', icon: '◷', show: !isAgent },
-    { path: '/mon-espace', label: 'Mon Espace', icon: '◎', show: true }
+    { path: '/matrice',       label: 'Matrice',       icon: '▦', show: true },
+    { path: '/convocations',  label: 'Convocations',  icon: '✉', show: !isAgent },
+    { path: '/mon-espace',    label: 'Mon Espace',    icon: '◎', show: !isViewer },
   ].filter(n => n.show);
 
   const settingsItems = [
-    { path: '/agents', label: 'Agents', icon: '◈', show: !isAgent },
-    { path: '/roulements', label: 'Roulements', icon: '↻', show: isAdmin || isAdminService },
-    { path: '/codes', label: 'Codes', icon: '◉', show: isAdmin || isAdminService },
-    { path: '/specialites', label: 'Spécialités', icon: '◆', show: isAdmin || isAdminService },
-    { path: '/services', label: 'Services', icon: '⊞', show: isAdmin || isAdminService },
-    { path: '/profils', label: 'Profils', icon: '⊙', show: isAdmin },
-    { path: '/jours-feries', label: 'Jours Fériés', icon: '◷', show: isAdmin },
+    { path: '/agents',      label: 'Agents',       icon: '◈', show: isAdmin || isAdminService || isViewer },
+    { path: '/roulements',  label: 'Roulements',   icon: '↻', show: isAdmin || isViewer },
+    { path: '/codes',       label: 'Codes',        icon: '◉', show: isAdmin || isViewer },
+    { path: '/specialites', label: 'Spécialités',  icon: '◆', show: isAdmin || isViewer },
+    { path: '/services',    label: 'Services',     icon: '⊞', show: isAdmin || isViewer },
+    { path: '/profils',     label: 'Profils',      icon: '⊙', show: isAdmin || isViewer },
+    { path: '/jours-feries',label: 'Jours Fériés', icon: '◷', show: isAdmin || isViewer },
   ].filter(n => n.show);
 
   function toggleService(serviceId) {
@@ -168,34 +168,44 @@ export default function AppShell() {
             <div className="sidebar-section">
               <div className="sidebar-section-header">
                 <span>Services</span>
-                <div className="sidebar-section-actions">
-                  <button onClick={expandAll} title="Tout déplier">⊞</button>
-                  <button onClick={collapseAll} title="Tout replier">⊟</button>
-                </div>
+                {!isAgent && !isPointeur && !isAdminService && (
+                  <div className="sidebar-section-actions">
+                    <button onClick={expandAll} title="Tout déplier">⊞</button>
+                    <button onClick={collapseAll} title="Tout replier">⊟</button>
+                  </div>
+                )}
               </div>
-              {services.map(svc => (
+              {(isAgent || isPointeur || isAdminService
+                ? services.filter(s => s.id === profile?.service_id)
+                : services
+              ).map(svc => (
                 <div key={svc.id}>
                   <div
                     className={`tree-item ${selectedService?.id === svc.id ? 'active' : ''}`}
                     onClick={() => {
+                      if (isAgent || isPointeur) return;
                       setSelectedService(svc);
                       setSelectedCellule(null);
                       toggleService(svc.id);
                     }}
+                    style={isAgent || isPointeur ? { cursor: 'default' } : undefined}
                   >
-                    <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                      {expandedServices[svc.id] ? '▾' : '▸'}
-                    </span>
+                    {!isAgent && !isPointeur && (
+                      <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                        {expandedServices[svc.id] ? '▾' : '▸'}
+                      </span>
+                    )}
                     <span style={{ flex: 1, fontSize: 13 }}>{svc.nom}</span>
                     {svc.nb_agents > 0 && <span className="badge badge-gray">{svc.nb_agents}</span>}
                   </div>
 
-                  {expandedServices[svc.id] && (
+                  {(isAgent || isPointeur || expandedServices[svc.id]) && (
                     <CellulesTree
                       serviceId={svc.id}
                       api={api}
                       selectedCellule={selectedCellule}
                       onSelect={(c) => { setSelectedCellule(c); setSelectedService(svc); }}
+                      filterCelluleId={isAgent ? profile?.cellule_id : undefined}
                     />
                   )}
                 </div>
@@ -203,23 +213,23 @@ export default function AppShell() {
             </div>
           </div>
 
-          {settingsItems.length > 0 && (
-            <div className="sidebar-footer" ref={settingsRef}>
-              {settingsOpen && (
-                <div className="settings-dropdown">
-                  {settingsItems.map(item => (
-                    <button
-                      key={item.path}
-                      className={`settings-dropdown-item ${location.pathname === item.path ? 'active' : ''}`}
-                      onClick={() => { navigate(item.path); setSettingsOpen(false); }}
-                    >
-                      <span className="settings-dropdown-icon">{item.icon}</span>
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="sidebar-footer-row">
+          <div className="sidebar-footer" ref={settingsRef}>
+            {settingsItems.length > 0 && settingsOpen && (
+              <div className="settings-dropdown">
+                {settingsItems.map(item => (
+                  <button
+                    key={item.path}
+                    className={`settings-dropdown-item ${location.pathname === item.path ? 'active' : ''}`}
+                    onClick={() => { navigate(item.path); setSettingsOpen(false); }}
+                  >
+                    <span className="settings-dropdown-icon">{item.icon}</span>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="sidebar-footer-row">
+              {settingsItems.length > 0 && (
                 <button
                   className={`sidebar-settings-btn ${settingsOpen ? 'open' : ''}`}
                   onClick={() => setSettingsOpen(prev => !prev)}
@@ -228,16 +238,16 @@ export default function AppShell() {
                   <span className="settings-gear">⚙</span>
                   <span>Paramètres</span>
                 </button>
-                <button
-                  className="sidebar-theme-btn"
-                  onClick={toggleTheme}
-                  title={theme === 'dark' ? 'Passer en mode jour' : 'Passer en mode nuit'}
-                >
-                  {theme === 'dark' ? '☀' : '☾'}
-                </button>
-              </div>
+              )}
+              <button
+                className="sidebar-theme-btn"
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Passer en mode jour' : 'Passer en mode nuit'}
+              >
+                {theme === 'dark' ? '☀' : '☾'}
+              </button>
             </div>
-          )}
+          </div>
         </aside>
 
         {/* BOUTON BASCULE SIDEBAR */}
@@ -258,7 +268,7 @@ export default function AppShell() {
   );
 }
 
-function CellulesTree({ serviceId, api, selectedCellule, onSelect }) {
+function CellulesTree({ serviceId, api, selectedCellule, onSelect, filterCelluleId }) {
   const [cellules, setCellules] = useState([]);
 
   useEffect(() => {
@@ -266,9 +276,20 @@ function CellulesTree({ serviceId, api, selectedCellule, onSelect }) {
     api.get(`/services/${serviceId}/cellules`).then(setCellules).catch(console.error);
   }, [api, serviceId]);
 
+  // Auto-sélection pour l'agent : sélectionne sa cellule dès le chargement
+  useEffect(() => {
+    if (!filterCelluleId || selectedCellule || cellules.length === 0) return;
+    const c = cellules.find(c => c.id === filterCelluleId);
+    if (c) onSelect(c);
+  }, [cellules, filterCelluleId]);
+
+  const visible = filterCelluleId
+    ? cellules.filter(c => c.id === filterCelluleId)
+    : cellules;
+
   return (
     <>
-      {cellules.map(c => (
+      {visible.map(c => (
         <div
           key={c.id}
           className={`tree-item child ${selectedCellule?.id === c.id ? 'active' : ''}`}

@@ -140,11 +140,11 @@ function RoleGuide({ role }) {
       title: 'Administrateur de service',
       color: 'var(--info)',
       items: [
-        'Gestion complète de votre service',
-        'Création d\'agents, cellules, roulements, codes',
+        'Accès limité à votre service uniquement',
+        'Gestion des agents de votre service',
         'Saisie et modification des pointages',
-        'Lecture seule sur mobile',
-        'Accès limité à votre service uniquement'
+        'Création, modification et suppression des convocations',
+        'Desktop uniquement'
       ]
     },
     pointeur: {
@@ -163,8 +163,8 @@ function RoleGuide({ role }) {
       color: 'var(--warning)',
       items: [
         'Création, modification et suppression des convocations',
-        'Lecture seule des pointages (pas de modification)',
-        'Accès limité à votre service',
+        'Lecture seule des pointages de tous les services (pas de modification)',
+        'Accès à tous les services via la matrice et le menu convocations',
         'Desktop uniquement'
       ]
     },

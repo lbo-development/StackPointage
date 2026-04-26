@@ -10,7 +10,6 @@ import SpecialitesPage from './pages/SpecialitesPage.jsx';
 import ServicesPage from './pages/ServicesPage.jsx';
 import ProfilesPage from './pages/ProfilesPage.jsx';
 import ConvocationsPage from './pages/ConvocationsPage.jsx';
-import PrevisionsPage from './pages/PrevisionsPage.jsx';
 import MonEspacePage from './pages/MonEspacePage.jsx';
 import JoursFeriesPage from './pages/JoursFeriesPage.jsx';
 
@@ -40,42 +39,45 @@ export default function App() {
             <Route index element={<Navigate to="/matrice" replace />} />
             <Route path="matrice" element={<PointageMatrixPage />} />
             <Route path="agents" element={
-              <RoleRoute roles={['admin_app','admin_service','pointeur']}>
+              <RoleRoute roles={['admin_app','admin_service','viewer']}>
                 <AgentsPage />
               </RoleRoute>
             } />
             <Route path="roulements" element={
-              <RoleRoute roles={['admin_app','admin_service']}>
+              <RoleRoute roles={['admin_app','viewer']}>
                 <RoulementsPage />
               </RoleRoute>
             } />
             <Route path="codes" element={
-              <RoleRoute roles={['admin_app','admin_service']}>
+              <RoleRoute roles={['admin_app','viewer']}>
                 <CodesPage />
               </RoleRoute>
             } />
             <Route path="specialites" element={
-              <RoleRoute roles={['admin_app','admin_service']}>
+              <RoleRoute roles={['admin_app','viewer']}>
                 <SpecialitesPage />
               </RoleRoute>
             } />
             <Route path="services" element={
-              <RoleRoute roles={['admin_app','admin_service']}>
+              <RoleRoute roles={['admin_app','viewer']}>
                 <ServicesPage />
               </RoleRoute>
             } />
             <Route path="profils" element={
-              <RoleRoute roles={['admin_app']}>
+              <RoleRoute roles={['admin_app','viewer']}>
                 <ProfilesPage />
               </RoleRoute>
             } />
             <Route path="jours-feries" element={
-              <RoleRoute roles={['admin_app']}>
+              <RoleRoute roles={['admin_app','viewer']}>
                 <JoursFeriesPage />
               </RoleRoute>
             } />
-            <Route path="convocations" element={<ConvocationsPage />} />
-            <Route path="previsions" element={<PrevisionsPage />} />
+            <Route path="convocations" element={
+              <RoleRoute roles={['admin_app','admin_service','pointeur','assistant_rh','viewer']}>
+                <ConvocationsPage />
+              </RoleRoute>
+            } />
             <Route path="mon-espace" element={<MonEspacePage />} />
           </Route>
         </Routes>
