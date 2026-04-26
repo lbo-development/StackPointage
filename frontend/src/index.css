@@ -824,6 +824,11 @@ label { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
 .matrix-scroll-panel::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 6px; border: 2px solid var(--bg-panel); }
 .matrix-scroll-panel::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+/* Masquer les flèches natives sur les inputs number avec contrôles custom */
+input[type=number].no-spin::-webkit-inner-spin-button,
+input[type=number].no-spin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number].no-spin { -moz-appearance: textfield; }
+
 /* ============ LOADING ============ */
 .loading-spinner {
   display: inline-block;

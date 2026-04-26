@@ -51,14 +51,27 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
   const touchStartPos   = useRef(null);
   const touchDragStart  = useRef(null);
   const dragRef         = useRef(null);
+  const isSyncing       = useRef(false);
 
   function handleRightScroll() {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
     if (leftBodyRef.current && rightBodyRef.current) {
       leftBodyRef.current.scrollTop = rightBodyRef.current.scrollTop;
     }
     if (rightHeaderRef.current && rightBodyRef.current) {
       rightHeaderRef.current.scrollLeft = rightBodyRef.current.scrollLeft;
     }
+    isSyncing.current = false;
+  }
+
+  function handleLeftScroll() {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+    if (leftBodyRef.current && rightBodyRef.current) {
+      rightBodyRef.current.scrollTop = leftBodyRef.current.scrollTop;
+    }
+    isSyncing.current = false;
   }
 
   useEffect(() => { dragRef.current = drag; }, [drag]);
@@ -236,23 +249,23 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
 
     if (row.type === 'cellule-header') {
       return (
-        <div key={`L-ch-${row.cellule.id}`} style={{ ...base, background: 'var(--bg-panel)' }}>
+        <div key={`L-ch-${row.cellule.id}`} style={{ ...base, background: 'var(--bg-hover)', borderTop: '1px solid var(--border-light)' }}>
           <div style={{ width: COL_W.indicator, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: row.cellule.couleur }} />
           </div>
-          <div style={{ flex: 1, fontWeight: 700, fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', overflow: 'hidden', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, paddingRight: 4 }}>
+          <div style={{ flex: 1, fontWeight: 700, fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', overflow: 'hidden', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, paddingRight: 4 }}>
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.cellule.nom}</span>
             {canManageCumuls && row.hasAgents && <button
               title="Configurer les lignes de cumul"
               onClick={e => { e.stopPropagation(); setCumulModal(row.cellule); }}
               style={{
                 flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer',
-                padding: '1px 3px', borderRadius: 3, color: 'var(--text-muted)',
-                display: 'flex', alignItems: 'center', lineHeight: 1, opacity: 0.7,
-                fontSize: 13,
+                padding: '1px 3px', borderRadius: 3, color: 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', lineHeight: 1, opacity: 0.9,
+                fontSize: 14,
               }}
-              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
-              onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.background = 'none'; }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '0.9'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'none'; }}
             >
               ⊕
             </button>}
@@ -296,7 +309,7 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
       const label = cfg.libelle || cfg.code_pointage;
       const specNom = cfg.specialites?.nom || 'Toutes';
       return (
-        <div key={`L-cc-${cfg.id}`} style={{ ...base, background: 'var(--bg-surface)', borderTop: '1px solid var(--border-grid)', borderBottom: '1px solid var(--border-grid)' }}>
+        <div key={`L-cc-${cfg.id}`} style={{ ...base, background: 'var(--bg-panel)', borderTop: '1px solid var(--border-grid)', borderBottom: '1px solid var(--border-grid)' }}>
           <div style={{ width: COL_W.indicator, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.couleur || 'var(--accent)', flexShrink: 0 }} />
           </div>
@@ -341,7 +354,7 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
       return (
         <tr key={`R-ch-${row.cellule.id}`} style={{ height: h }}>
           {dates.map(dateStr => (
-            <td key={dateStr} style={{ background: 'var(--bg-panel)', height: h, maxHeight: h }} />
+            <td key={dateStr} style={{ background: 'var(--bg-hover)', height: h, maxHeight: h, borderTop: '1px solid var(--border-light)' }} />
           ))}
         </tr>
       );
@@ -375,7 +388,7 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
             })();
             return (
               <td key={dateStr} style={{
-                background: isAlert ? 'rgba(239,68,68,0.08)' : 'var(--bg-surface)',
+                background: isAlert ? 'rgba(239,68,68,0.08)' : 'var(--bg-panel)',
                 fontSize: 11, textAlign: 'center', fontFamily: 'var(--font-mono)',
                 color: count > 0 ? (isAlert ? '#ef4444' : (cfg.couleur || 'var(--accent)')) : 'transparent',
                 fontWeight: 700,
@@ -506,6 +519,7 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
           ref={leftBodyRef}
           className="matrix-left-body"
           style={{ overflowY: 'scroll', flex: 1, scrollbarWidth: 'none' }}
+          onScroll={handleLeftScroll}
         >
           {rows.map(row => renderLeftRow(row))}
           <div style={{ height: spacerH, flexShrink: 0 }} />
@@ -685,7 +699,7 @@ function CumulConfigModal({ cellule, specialites, codesMap, onClose, onSaved }) 
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 500, width: '95vw' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: 380, width: '95vw' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">
             Lignes de cumul
@@ -750,14 +764,18 @@ function CumulConfigModal({ cellule, specialites, codesMap, onClose, onSaved }) 
                   ))}
                 </select>
               </div>
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">Couleur</label>
-                  <input type="color" className="form-control" value={form.couleur} onChange={e => setForm(p => ({ ...p, couleur: e.target.value }))} style={{ height: 36, padding: 2, cursor: 'pointer' }} />
+                  <input type="color" className="form-control" value={form.couleur} onChange={e => setForm(p => ({ ...p, couleur: e.target.value }))} style={{ height: 30, padding: '2px 4px', cursor: 'pointer' }} />
                 </div>
-                <div className="form-group" style={{ flex: 1 }}>
+                <div className="form-group">
                   <label className="form-label">Ordre</label>
-                  <input type="number" className="form-control" value={form.ordre} onChange={e => setForm(p => ({ ...p, ordre: Number(e.target.value) }))} min={0} />
+                  <div style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-input, var(--bg-secondary))' }}>
+                    <button type="button" onClick={() => setForm(p => ({ ...p, ordre: Math.max(0, p.ordre - 1) }))} style={{ width: 28, padding: '5px 0', background: 'transparent', border: 'none', borderRight: '1px solid var(--border)', color: 'var(--text)', cursor: 'pointer', fontSize: 16, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>−</button>
+                    <input type="number" className="no-spin" value={form.ordre} onChange={e => setForm(p => ({ ...p, ordre: Math.max(0, Number(e.target.value)) }))} min={0} style={{ width: 40, padding: '5px 0', textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text)', outline: 'none', fontSize: 12 }} />
+                    <button type="button" onClick={() => setForm(p => ({ ...p, ordre: p.ordre + 1 }))} style={{ width: 28, padding: '5px 0', background: 'transparent', border: 'none', borderLeft: '1px solid var(--border)', color: 'var(--text)', cursor: 'pointer', fontSize: 16, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>+</button>
+                  </div>
                 </div>
               </div>
               <div className="form-group">
@@ -772,15 +790,26 @@ function CumulConfigModal({ cellule, specialites, codesMap, onClose, onSaved }) 
                   >
                     {['>', '<', '=', '>=', '<='].map(op => <option key={op} value={op}>{op}</option>)}
                   </select>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={form.seuil_alerte}
-                    onChange={e => setForm(p => ({ ...p, seuil_alerte: e.target.value }))}
-                    min={0}
-                    placeholder="Valeur"
-                    style={{ width: 90 }}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-input, var(--bg-secondary))' }}>
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, seuil_alerte: Math.max(0, Number(p.seuil_alerte) - 1) }))}
+                      style={{ width: 28, padding: '5px 0', background: 'transparent', border: 'none', borderRight: '1px solid var(--border)', color: 'var(--text)', cursor: 'pointer', fontSize: 16, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                    >−</button>
+                    <input
+                      type="number"
+                      className="no-spin"
+                      value={form.seuil_alerte}
+                      onChange={e => setForm(p => ({ ...p, seuil_alerte: Math.max(0, Number(e.target.value)) }))}
+                      min={0}
+                      style={{ width: 40, padding: '5px 0', textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text)', outline: 'none', fontSize: 12 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, seuil_alerte: Number(p.seuil_alerte) + 1 }))}
+                      style={{ width: 28, padding: '5px 0', background: 'transparent', border: 'none', borderLeft: '1px solid var(--border)', color: 'var(--text)', cursor: 'pointer', fontSize: 16, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                    >+</button>
+                  </div>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
                   Optionnel — si la condition est remplie, le cumul s'affiche en rouge.
