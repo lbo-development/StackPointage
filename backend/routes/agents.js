@@ -229,6 +229,11 @@ router.post('/:id/photo', requireRole('admin_app', 'admin_service'), async (req,
     const { data: base64, mimeType } = req.body;
     if (!base64 || !mimeType) return res.status(400).json({ error: 'data et mimeType requis' });
 
+    const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+      return res.status(400).json({ error: 'Format non autorisé. Formats acceptés : JPEG, PNG, WEBP, GIF' });
+    }
+
     const buffer = Buffer.from(base64, 'base64');
     const storagePath = `photo/${id}`;
 
