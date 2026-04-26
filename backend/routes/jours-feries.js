@@ -2,9 +2,12 @@ import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.js';
 import { requireRole } from '../middlewares/role.js';
 import { supabase } from '../supabase.js';
+import { cache, invalidate } from '../middlewares/cache.js';
 
 const router = Router();
 router.use(authMiddleware);
+
+const CACHE_PREFIX = '/api/jours-feries';
 
 // Algorithme grégorien anonyme — Dimanche de Pâques
 function easterSunday(year) {
@@ -51,7 +54,7 @@ function feriesMetropole(year) {
 }
 
 // GET /api/jours-feries?annee=2025
-router.get('/', async (req, res) => {
+router.get('/', cache(10 * 60 * 1000), async (req, res) => {
   try {
     const { annee } = req.query;
     let query = supabase.from('jours_feries').select('*').order('date');
@@ -80,6 +83,7 @@ router.post('/generer', requireRole('admin_app'), async (req, res) => {
       .upsert(feries, { onConflict: 'date', ignoreDuplicates: true })
       .select();
     if (error) throw error;
+    invalidate(CACHE_PREFIX);
     res.json({ inserted: data?.length ?? 0, feries: data });
   } catch (err) {
     console.error(err);
@@ -97,6 +101,7 @@ router.post('/', requireRole('admin_app'), async (req, res) => {
       .select()
       .single();
     if (error) throw error;
+    invalidate(CACHE_PREFIX);
     res.status(201).json(data);
   } catch (err) {
     console.error(err);
@@ -115,6 +120,7 @@ router.put('/:id', requireRole('admin_app'), async (req, res) => {
       .select()
       .single();
     if (error) throw error;
+    invalidate(CACHE_PREFIX);
     res.json(data);
   } catch (err) {
     console.error(err);
@@ -127,6 +133,7 @@ router.delete('/:id', requireRole('admin_app'), async (req, res) => {
   try {
     const { error } = await supabase.from('jours_feries').delete().eq('id', req.params.id);
     if (error) throw error;
+    invalidate(CACHE_PREFIX);
     res.json({ success: true });
   } catch (err) {
     console.error(err);

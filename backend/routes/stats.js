@@ -4,6 +4,7 @@ import { authMiddleware } from '../middlewares/auth.js';
 import { requireServiceScope } from '../middlewares/role.js';
 import { supabase } from '../supabase.js';
 import { buildMatrix } from '../services/matrixService.js';
+import { cache } from '../middlewares/cache.js';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ const router = Router();
  *   cellule_id   (optionnel)
  *   agent_ids    (optionnel, valeurs séparées par virgule)
  */
-router.get('/', authMiddleware, requireServiceScope, async (req, res) => {
+router.get('/', authMiddleware, requireServiceScope, cache(2 * 60 * 1000), async (req, res) => {
   const { service_id, date_debut, date_fin, cellule_id, agent_ids } = req.query;
 
   if (!service_id || !date_debut || !date_fin) {
