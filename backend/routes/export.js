@@ -106,7 +106,7 @@ router.get('/excel', requireServiceScope, async (req, res) => {
 
   } catch (err) {
     console.error('export error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 

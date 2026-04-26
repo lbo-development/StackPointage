@@ -52,7 +52,8 @@ router.post('/', requireRole('admin_app', 'admin_service'), requireServiceScope,
 
     res.status(201).json(roulement);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -67,7 +68,8 @@ router.get('/feries', async (req, res) => {
     if (error) throw error;
     res.json((data || []).map(f => f.date));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -96,7 +98,8 @@ router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) =
 
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 

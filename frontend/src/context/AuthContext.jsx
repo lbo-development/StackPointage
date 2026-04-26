@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -58,22 +58,21 @@ export function createApiClient(token) {
 // ============================================================
 // AUTH PROVIDER
 // ============================================================
-export function AuthProvider({ children }) {
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
+function readStoredSession() {
+  try {
     const stored = localStorage.getItem('pointage_session');
-    if (stored) {
-      try {
-        const { session: s, profile: p } = JSON.parse(stored);
-        setSession(s);
-        setProfile(p);
-      } catch {}
-    }
-    setLoading(false);
-  }, []);
+    if (stored) return JSON.parse(stored);
+  } catch {
+    // ignore malformed localStorage
+  }
+  return null;
+}
+
+export function AuthProvider({ children }) {
+  const initial = readStoredSession();
+  const [session, setSession] = useState(initial?.session ?? null);
+  const [profile, setProfile] = useState(initial?.profile ?? null);
+  const loading = false;
 
   const login = useCallback(async (email, password) => {
     const res = await fetch(`${API_BASE}/auth/login`, {

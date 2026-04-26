@@ -5,7 +5,7 @@ import { calculerCodeRoulement } from './roulementService.js';
  * Construit la matrice complète pour un service sur une plage de dates
  * Retourne : dates[], cellules[], agents[], pointages (réel + théorique), cumuls
  */
-export async function buildMatrix(serviceId, dateDebut, dateFin, mode = 'reel') {
+export async function buildMatrix(serviceId, dateDebut, dateFin, _mode = 'reel') {
   // 1. Dates de la plage
   const dates = generateDateRange(dateDebut, dateFin);
 

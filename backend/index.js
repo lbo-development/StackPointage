@@ -59,11 +59,11 @@ app.get("/api/health", (req, res) =>
   res.json({ status: "ok", timestamp: new Date() }),
 );
 
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error(err.stack);
-  res
-    .status(err.status || 500)
-    .json({ error: err.message || "Erreur serveur" });
+  const status = err.status || 500;
+  const message = status < 500 ? err.message : "Erreur serveur interne.";
+  res.status(status).json({ error: message });
 });
 
 app.listen(PORT, "0.0.0.0", () => {

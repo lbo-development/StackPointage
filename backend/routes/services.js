@@ -60,7 +60,8 @@ router.put('/reorder', requireRole('admin_app'), async (req, res) => {
     ));
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -85,7 +86,8 @@ router.put('/cellules/reorder', requireRole('admin_app', 'admin_service'), async
     ));
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -115,7 +117,8 @@ router.put('/specialites/reorder', requireRole('admin_app', 'admin_service'), as
     ));
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 

@@ -111,7 +111,7 @@ router.get('/', authMiddleware, requireServiceScope, async (req, res) => {
     });
   } catch (err) {
     console.error('[stats] erreur :', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 

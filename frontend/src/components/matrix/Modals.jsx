@@ -85,9 +85,6 @@ export function PointageModal({ agent, date, currentCode, codes, onSave, onClose
   );
 }
 
-export default PointageModal;
-
-
 // ============ PeriodeModal.jsx ============
 import { useState as useState2 } from 'react';
 

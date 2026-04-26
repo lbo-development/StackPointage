@@ -88,7 +88,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(profile);
   } catch (err) {
     await supabase.auth.admin.deleteUser(userId);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 

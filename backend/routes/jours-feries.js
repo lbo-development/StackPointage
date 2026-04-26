@@ -62,7 +62,8 @@ router.get('/', async (req, res) => {
     if (error) throw error;
     res.json(data || []);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -81,7 +82,8 @@ router.post('/generer', requireRole('admin_app'), async (req, res) => {
     if (error) throw error;
     res.json({ inserted: data?.length ?? 0, feries: data });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -97,7 +99,8 @@ router.post('/', requireRole('admin_app'), async (req, res) => {
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -114,7 +117,8 @@ router.put('/:id', requireRole('admin_app'), async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -125,7 +129,8 @@ router.delete('/:id', requireRole('admin_app'), async (req, res) => {
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 

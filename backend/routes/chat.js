@@ -30,7 +30,7 @@ ${context ? `--- DONNÉES DE LA MATRICE COURANTE ---\n${context}\n--- FIN DES DO
     res.json({ content: response.content[0].text });
   } catch (err) {
     console.error('chat error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 

@@ -31,7 +31,8 @@ router.get('/', requireServiceScope, async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -62,7 +63,8 @@ router.get('/sans-affectation', requireServiceScope, async (req, res) => {
     if (error) throw error;
     res.json(data || []);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -77,7 +79,8 @@ router.get('/:id', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -139,7 +142,8 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
 
     res.status(201).json(agent);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -164,7 +168,8 @@ router.put('/assignments/:id', requireRole('admin_app', 'admin_service'), async 
     if (error) throw error;
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -181,7 +186,8 @@ router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) =
     if (error) throw error;
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -218,7 +224,8 @@ router.post('/:id/assignments', requireRole('admin_app', 'admin_service'), async
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -249,7 +256,8 @@ router.post('/:id/photo', requireRole('admin_app', 'admin_service'), async (req,
 
     res.json({ photo_url: publicUrl });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -265,7 +273,8 @@ router.delete('/:id/photo', requireRole('admin_app', 'admin_service'), async (re
     await supabase.from('agents').update({ photo_url: null }).eq('id', id);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -290,7 +299,8 @@ router.patch('/assignments/:assignmentId/ordre', requireRole('admin_app', 'admin
     if (error) throw error;
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -320,7 +330,8 @@ router.post('/assignments/reorder', requireRole('admin_app', 'admin_service', 'p
 
     res.json({ success: true, updated: ordres.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 

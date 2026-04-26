@@ -34,7 +34,7 @@ router.get('/matrix', requireServiceScope, async (req, res) => {
     res.json(matrix);
   } catch (err) {
     console.error('matrix error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -96,7 +96,7 @@ router.post('/', requireRole('admin_app', 'admin_service', 'pointeur'), requireS
     res.json(result);
   } catch (err) {
     console.error('pointage upsert error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -159,7 +159,7 @@ router.post('/periode', requireRole('admin_app', 'admin_service', 'pointeur'), r
     res.json({ message: `${upserts.length} pointages enregistrés`, count: upserts.length, skipped: (locked || []).length });
   } catch (err) {
     console.error('periode error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
@@ -182,7 +182,8 @@ router.delete('/:id', requireRole('admin_app', 'admin_service', 'pointeur'), asy
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
   }
 });
 
