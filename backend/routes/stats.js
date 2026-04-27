@@ -7,20 +7,9 @@ import { buildMatrix } from '../services/matrixService.js';
 import { cache } from '../middlewares/cache.js';
 
 const router = Router();
+router.use(authMiddleware);
 
-/**
- * GET /api/stats
- * Statistiques de pointage par service / cellule / agents sur une période.
- * Comptabilise réel sinon théorique (prévision + roulement).
- *
- * Query params :
- *   service_id   (obligatoire)
- *   date_debut   YYYY-MM-DD  (obligatoire)
- *   date_fin     YYYY-MM-DD  (obligatoire)
- *   cellule_id   (optionnel)
- *   agent_ids    (optionnel, valeurs séparées par virgule)
- */
-router.get('/', authMiddleware, requireServiceScope, cache(2 * 60 * 1000), async (req, res) => {
+router.get('/', requireServiceScope, cache(2 * 60 * 1000), async (req, res) => {
   const { service_id, date_debut, date_fin, cellule_id, agent_ids } = req.query;
 
   if (!service_id || !date_debut || !date_fin) {
