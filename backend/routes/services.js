@@ -18,7 +18,7 @@ router.get('/', cache(5 * 60 * 1000), async (req, res) => {
     svcQuery,
     supabase.from('agent_assignments').select('service_id').eq('is_active', true)
   ]);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   const countsByService = (counts || []).reduce((acc, row) => {
     acc[row.service_id] = (acc[row.service_id] || 0) + 1;
     return acc;
@@ -34,7 +34,7 @@ router.get('/:id/cellules', cache(5 * 60 * 1000), async (req, res) => {
     celQuery,
     supabase.from('agent_assignments').select('cellule_id').eq('service_id', req.params.id).eq('is_active', true)
   ]);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   const countsByCellule = (counts || []).reduce((acc, row) => {
     if (row.cellule_id) acc[row.cellule_id] = (acc[row.cellule_id] || 0) + 1;
     return acc;
@@ -44,13 +44,17 @@ router.get('/:id/cellules', cache(5 * 60 * 1000), async (req, res) => {
 
 router.get('/:id/specialites', cache(5 * 60 * 1000), async (req, res) => {
   const { data, error } = await supabase.from('specialites').select('*').eq('service_id', req.params.id).eq('is_active', true).order('ordre');
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json(data);
 });
 
 router.post('/', requireRole('admin_app'), async (req, res) => {
-  const { data, error } = await supabase.from('services').insert(req.body).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  const { nom, code, description, num_ordre, is_active } = req.body;
+  const { data, error } = await supabase
+    .from('services')
+    .insert({ nom, code, description, num_ordre, is_active })
+    .select().single();
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   invalidate(CACHE_PREFIX);
   res.status(201).json(data);
 });
@@ -71,15 +75,23 @@ router.put('/reorder', requireRole('admin_app'), async (req, res) => {
 });
 
 router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
-  const { data, error } = await supabase.from('services').update(req.body).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  const { nom, code, description, num_ordre, is_active } = req.body;
+  const { data, error } = await supabase
+    .from('services')
+    .update({ nom, code, description, num_ordre, is_active })
+    .eq('id', req.params.id).select().single();
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   invalidate(CACHE_PREFIX);
   res.json(data);
 });
 
 router.post('/:id/cellules', requireRole('admin_app', 'admin_service'), async (req, res) => {
-  const { data, error } = await supabase.from('cellules').insert({ ...req.body, service_id: req.params.id }).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  const { nom, code, couleur, ordre, is_active } = req.body;
+  const { data, error } = await supabase
+    .from('cellules')
+    .insert({ nom, code, couleur, ordre, is_active, service_id: req.params.id })
+    .select().single();
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   invalidate(CACHE_PREFIX);
   res.status(201).json(data);
 });
@@ -100,20 +112,25 @@ router.put('/cellules/reorder', requireRole('admin_app', 'admin_service'), async
 });
 
 router.put('/cellules/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
-  const { data, error } = await supabase.from('cellules').update(req.body).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  const { nom, code, couleur, ordre, is_active } = req.body;
+  const { data, error } = await supabase
+    .from('cellules')
+    .update({ nom, code, couleur, ordre, is_active })
+    .eq('id', req.params.id).select().single();
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   invalidate(CACHE_PREFIX);
   res.json(data);
 });
 
 // ── Spécialités ──────────────────────────────────────────────
 router.post('/:id/specialites', requireRole('admin_app', 'admin_service'), async (req, res) => {
+  const { nom, code, couleur, ordre, is_active } = req.body;
   const { data, error } = await supabase
     .from('specialites')
-    .insert({ ...req.body, service_id: req.params.id })
+    .insert({ nom, code, couleur, ordre, is_active, service_id: req.params.id })
     .select()
     .single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   invalidate(CACHE_PREFIX);
   res.status(201).json(data);
 });
@@ -134,13 +151,14 @@ router.put('/specialites/reorder', requireRole('admin_app', 'admin_service'), as
 });
 
 router.put('/specialites/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
+  const { nom, code, couleur, ordre, is_active } = req.body;
   const { data, error } = await supabase
     .from('specialites')
-    .update(req.body)
+    .update({ nom, code, couleur, ordre, is_active })
     .eq('id', req.params.id)
     .select()
     .single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   invalidate(CACHE_PREFIX);
   res.json(data);
 });

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -9,21 +9,20 @@ const API_BASE = import.meta.env.VITE_API_URL
   : '/api';
 
 // ============================================================
-// API CLIENT
+// API CLIENT — tokens dans les cookies httpOnly, pas de header Authorization
 // ============================================================
-export function createApiClient(token) {
-  const headers = (extra = {}) => ({
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...extra
-  });
-
+export function createApiClient(onUnauthorized) {
   async function request(method, path, body) {
     const res = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: headers(),
-      body: body ? JSON.stringify(body) : undefined
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: body ? JSON.stringify(body) : undefined,
     });
+    if (res.status === 401) {
+      onUnauthorized?.();
+      throw new Error('Session expirée');
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || `HTTP ${res.status}`);
@@ -32,16 +31,17 @@ export function createApiClient(token) {
   }
 
   return {
-    get: (path) => request('GET', path),
-    post: (path, body) => request('POST', path, body),
-    put: (path, body) => request('PUT', path, body),
-    delete: (path) => request('DELETE', path),
+    get:    (path)       => request('GET',    path),
+    post:   (path, body) => request('POST',   path, body),
+    put:    (path, body) => request('PUT',    path, body),
+    patch:  (path, body) => request('PATCH',  path, body),
+    delete: (path)       => request('DELETE', path),
 
     // Export spécial (blob)
     downloadExcel: async (params) => {
       const qs = new URLSearchParams(params).toString();
       const res = await fetch(`${API_BASE}/export/excel?${qs}`, {
-        headers: headers()
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Export échoué');
       const blob = await res.blob();
@@ -51,82 +51,81 @@ export function createApiClient(token) {
       a.download = `pointages_${params.date_debut}_${params.date_fin}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-    }
+    },
   };
 }
 
 // ============================================================
 // AUTH PROVIDER
 // ============================================================
-function readStoredSession() {
-  try {
-    const stored = localStorage.getItem('pointage_session');
-    if (stored) return JSON.parse(stored);
-  } catch {
-    // ignore malformed localStorage
-  }
-  return null;
-}
-
 export function AuthProvider({ children }) {
-  const initial = readStoredSession();
-  const [session, setSession] = useState(initial?.session ?? null);
-  const [profile, setProfile] = useState(initial?.profile ?? null);
-  const loading = false;
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Restauration de session au montage via cookie httpOnly
+  useEffect(() => {
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.profile) setProfile(data.profile); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   const login = useCallback(async (email, password) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      credentials: 'include',
+      body: JSON.stringify({ email, password }),
     });
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error || 'Connexion échouée');
     }
     const data = await res.json();
-    setSession(data.session);
     setProfile(data.profile);
-    localStorage.setItem('pointage_session', JSON.stringify({ session: data.session, profile: data.profile }));
     return data;
   }, []);
 
-  const logout = useCallback(() => {
-    setSession(null);
+  const logout = useCallback(async () => {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    }).catch(() => {});
     setProfile(null);
-    localStorage.removeItem('pointage_session');
   }, []);
 
-  const api = session ? createApiClient(session.access_token) : null;
+  // Déconnexion automatique si un appel API reçoit un 401
+  const api = profile
+    ? createApiClient(() => setProfile(null))
+    : null;
 
-  // Vérification du rôle
   const can = useCallback((action) => {
     if (!profile) return false;
     const role = profile.role;
     const perms = {
-      'edit_pointage':    ['admin_app', 'admin_service', 'pointeur'],
-      'edit_agents':      ['admin_app', 'admin_service'],
-      'edit_roulements':  ['admin_app', 'admin_service'],
-      'edit_codes':       ['admin_app', 'admin_service'],
-      'edit_convocations':['admin_app', 'admin_service', 'pointeur', 'assistant_rh'],
-      'read_only':        ['agent', 'viewer'],
-      'admin':            ['admin_app'],
+      'edit_pointage':     ['admin_app', 'admin_service', 'pointeur'],
+      'edit_agents':       ['admin_app', 'admin_service'],
+      'edit_roulements':   ['admin_app', 'admin_service'],
+      'edit_codes':        ['admin_app', 'admin_service'],
+      'edit_convocations': ['admin_app', 'admin_service', 'pointeur', 'assistant_rh'],
+      'read_only':         ['agent', 'viewer'],
+      'admin':             ['admin_app'],
     };
     return perms[action]?.includes(role) ?? false;
   }, [profile]);
 
-  const isAdmin       = profile?.role === 'admin_app';
+  const isAdmin        = profile?.role === 'admin_app';
   const isAdminService = profile?.role === 'admin_service';
-  const isPointeur    = profile?.role === 'pointeur';
-  const isAssistantRH = profile?.role === 'assistant_rh';
-  const isAgent       = profile?.role === 'agent';
-  const isViewer      = profile?.role === 'viewer';
+  const isPointeur     = profile?.role === 'pointeur';
+  const isAssistantRH  = profile?.role === 'assistant_rh';
+  const isAgent        = profile?.role === 'agent';
+  const isViewer       = profile?.role === 'viewer';
 
   return (
     <AuthContext.Provider value={{
-      session, profile, loading, api, login, logout, can,
+      profile, loading, api, login, logout, can,
       isAdmin, isAdminService, isPointeur, isAssistantRH, isAgent, isViewer,
-      token: session?.access_token
     }}>
       {children}
     </AuthContext.Provider>

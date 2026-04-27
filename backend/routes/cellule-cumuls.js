@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
     else return res.json([]);
   }
   const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json(data || []);
 });
 
@@ -32,7 +32,7 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
     .insert(req.body)
     .select('*, specialites(id, nom)')
     .single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.status(201).json(data);
 });
 
@@ -43,13 +43,13 @@ router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) =
     .eq('id', req.params.id)
     .select('*, specialites(id, nom)')
     .single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json(data);
 });
 
 router.delete('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
   const { error } = await supabase.from('cellule_cumuls').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json({ success: true });
 });
 

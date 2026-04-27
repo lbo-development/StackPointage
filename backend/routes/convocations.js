@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
   if (date_debut) query = query.gte('date', date_debut);
   if (date_fin) query = query.lte('date', date_fin);
   const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json(data);
 });
 
@@ -24,20 +24,20 @@ router.post('/', requireRole('admin_app', 'admin_service', 'pointeur', 'assistan
   const { data, error } = await supabase.from('convocations')
     .insert({ ...req.body, cree_par: req.profile.id })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.status(201).json(data);
 });
 
 router.put('/:id', requireRole('admin_app', 'admin_service', 'pointeur', 'assistant_rh'), async (req, res) => {
   const { data, error } = await supabase.from('convocations')
     .update(req.body).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json(data);
 });
 
 router.delete('/:id', requireRole('admin_app', 'admin_service', 'assistant_rh'), async (req, res) => {
   const { error } = await supabase.from('convocations').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json({ success: true });
 });
 

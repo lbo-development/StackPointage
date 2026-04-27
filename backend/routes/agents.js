@@ -132,7 +132,11 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
 
       const { error: errA } = await supabase.from('agent_assignments').insert({
         agent_id: agent.id,
-        ...assignment,
+        service_id: assignment.service_id,
+        cellule_id: assignment.cellule_id,
+        specialite_id: assignment.specialite_id || null,
+        roulement_id: assignment.roulement_id || null,
+        date_debut: assignment.date_debut,
         ordre: assignment.ordre ?? nextOrdre,
         is_active: true,
         date_debut_reference: assignment.date_debut_reference || null,

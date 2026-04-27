@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 
 import authRoutes from "./routes/auth.js";
 import agentsRoutes from "./routes/agents.js";
@@ -56,6 +57,7 @@ app.use(
     credentials: true,
   }),
 );
+app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 
 // Routes

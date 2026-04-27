@@ -14,9 +14,9 @@ import MonEspacePage from './pages/MonEspacePage.jsx';
 import JoursFeriesPage from './pages/JoursFeriesPage.jsx';
 
 function PrivateRoute({ children }) {
-  const { session, loading } = useAuth();
+  const { profile, loading } = useAuth();
   if (loading) return <div className="loading-overlay"><div className="loading-spinner" /> Chargement…</div>;
-  return session ? children : <Navigate to="/login" replace />;
+  return profile ? children : <Navigate to="/login" replace />;
 }
 
 function RoleRoute({ children, roles }) {

@@ -15,7 +15,7 @@ router.get('/agents', async (req, res) => {
     .from('agents')
     .select('id, matricule, nom, prenom, profile_id, is_active')
     .order('nom');
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json(data);
 });
 
@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
     supabase.from('agents').select('id, nom, prenom, matricule, profile_id').not('profile_id', 'is', null),
     supabase.from('services').select('id, nom, code'),
   ]);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
 
   const servicesById = (services || []).reduce((acc, s) => { acc[s.id] = s; return acc; }, {});
   const agentByProfileId = (linkedAgents || []).reduce((acc, a) => { acc[a.profile_id] = a; return acc; }, {});
@@ -77,7 +77,8 @@ router.post('/', async (req, res) => {
 
     if (profileError) {
       await supabase.auth.admin.deleteUser(userId);
-      return res.status(500).json({ error: profileError.message });
+      console.error(profileError);
+      return res.status(500).json({ error: 'Erreur serveur interne.' });
     }
 
     // 3. Lier à un agent
@@ -114,7 +115,7 @@ router.put('/:id', async (req, res) => {
     .eq('id', id)
     .select()
     .single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
 
   // Mettre à jour le lien agent si fourni dans la requête
   if ('agent_id' in req.body) {
@@ -123,7 +124,7 @@ router.put('/:id', async (req, res) => {
       .from('agents')
       .update({ profile_id: null })
       .eq('profile_id', id);
-    if (unlinkErr) return res.status(500).json({ error: `Déliage agent: ${unlinkErr.message}` });
+    if (unlinkErr) { console.error(unlinkErr); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
 
     // Lier le nouvel agent
     if (agent_id) {
@@ -131,7 +132,7 @@ router.put('/:id', async (req, res) => {
         .from('agents')
         .update({ profile_id: id })
         .eq('id', agent_id);
-      if (linkErr) return res.status(500).json({ error: `Liaison agent: ${linkErr.message}` });
+      if (linkErr) { console.error(linkErr); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
     }
   }
 
@@ -145,7 +146,7 @@ router.put('/:id/password', async (req, res) => {
     return res.status(400).json({ error: 'Mot de passe requis (minimum 6 caractères)' });
   }
   const { error } = await supabase.auth.admin.updateUserById(req.params.id, { password });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json({ ok: true });
 });
 

@@ -14,7 +14,7 @@ router.get('/', requireServiceScope, async (req, res) => {
     query = query.or(`service_id.eq.${serviceId},service_id.is.null`);
   }
   const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json(data);
 });
 
@@ -75,14 +75,17 @@ router.get('/feries', async (req, res) => {
 
 router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
   try {
-    const { cycles, ...roulementData } = req.body;
+    const { nom, longueur_cycle, date_debut_reference, service_id, feries_non_travailles, date_ref_par_agent, is_active, cycles } = req.body;
 
     // service_id explicitement null = passage en roulement global (admin_app uniquement)
-    if (roulementData.service_id === null && req.profile.role !== 'admin_app') {
+    if (service_id === null && req.profile.role !== 'admin_app') {
       return res.status(403).json({ error: 'Seul un admin_app peut rendre un roulement global' });
     }
 
-    const { data, error } = await supabase.from('roulements').update(roulementData).eq('id', req.params.id).select().single();
+    const { data, error } = await supabase
+      .from('roulements')
+      .update({ nom, longueur_cycle, date_debut_reference, service_id, feries_non_travailles, date_ref_par_agent, is_active })
+      .eq('id', req.params.id).select().single();
     if (error) throw error;
 
     if (cycles) {

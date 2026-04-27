@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
   if (date_debut) query = query.gte('date', date_debut);
   if (date_fin) query = query.lte('date', date_fin);
   const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json(data);
 });
 
@@ -26,7 +26,7 @@ router.post('/', requireRole('admin_app', 'admin_service', 'pointeur'), async (r
   const { data, error } = existing
     ? await supabase.from('previsions_absence').update(payload).eq('id', existing.id).select().single()
     : await supabase.from('previsions_absence').insert(payload).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error(error); return res.status(500).json({ error: 'Erreur serveur interne.' }); }
   res.json(data);
 });
 
