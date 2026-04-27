@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.js';
 import { requireRole, requireServiceScope } from '../middlewares/role.js';
 import { supabase } from '../supabase.js';
+import { PHOTO_MAX_BYTES, detectImageMime } from '../lib/imageUtils.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -237,16 +238,25 @@ router.post('/:id/assignments', requireRole('admin_app', 'admin_service'), async
 router.post('/:id/photo', requireRole('admin_app', 'admin_service'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { data: base64, mimeType } = req.body;
-    if (!base64 || !mimeType) return res.status(400).json({ error: 'data et mimeType requis' });
+    const { data: base64 } = req.body;
+    if (!base64) return res.status(400).json({ error: 'data (base64) requis' });
 
     const buffer = Buffer.from(base64, 'base64');
-    const storagePath = `photo/${id}`;
 
+    if (buffer.length > PHOTO_MAX_BYTES) {
+      return res.status(400).json({ error: 'Photo trop volumineuse (max 5 Mo)' });
+    }
+
+    const detectedMime = detectImageMime(buffer);
+    if (!detectedMime) {
+      return res.status(400).json({ error: 'Format non supporté. Utilisez JPEG, PNG ou WebP.' });
+    }
+
+    const storagePath = `photo/${id}`;
     const { error: upErr } = await supabase.storage
       .from('Documents')
-      .upload(storagePath, buffer, { contentType: mimeType, upsert: true });
-    if (upErr) throw new Error(`Storage upload: ${upErr.message}`);
+      .upload(storagePath, buffer, { contentType: detectedMime, upsert: true });
+    if (upErr) throw upErr;
 
     const { data: { publicUrl } } = supabase.storage
       .from('Documents')
@@ -256,7 +266,7 @@ router.post('/:id/photo', requireRole('admin_app', 'admin_service'), async (req,
       .from('agents')
       .update({ photo_url: publicUrl })
       .eq('id', id);
-    if (dbErr) throw new Error(`DB update: ${dbErr.message}`);
+    if (dbErr) throw dbErr;
 
     res.json({ photo_url: publicUrl });
   } catch (err) {
