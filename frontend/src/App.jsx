@@ -12,6 +12,7 @@ import ProfilesPage from './pages/ProfilesPage.jsx';
 import ConvocationsPage from './pages/ConvocationsPage.jsx';
 import MonEspacePage from './pages/MonEspacePage.jsx';
 import JoursFeriesPage from './pages/JoursFeriesPage.jsx';
+import ExportCataloguePage from './pages/ExportCataloguePage.jsx';
 
 function PrivateRoute({ children }) {
   const { profile, loading } = useAuth();
@@ -79,6 +80,11 @@ export default function App() {
               </RoleRoute>
             } />
             <Route path="mon-espace" element={<MonEspacePage />} />
+            <Route path="export-catalogue" element={
+              <RoleRoute roles={['admin_app','admin_service','pointeur','assistant_rh','viewer']}>
+                <ExportCataloguePage />
+              </RoleRoute>
+            } />
           </Route>
         </Routes>
       </BrowserRouter>

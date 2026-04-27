@@ -1,7 +1,7 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
-// Clé par utilisateur authentifié (authMiddleware doit avoir tourné avant)
-const userKey = (req) => req.profile?.id || req.ip;
+// Clé par utilisateur authentifié, sinon IP normalisée via le helper officiel
+const userKey = (req) => req.profile?.id || ipKeyGenerator(req);
 
 export const chatLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

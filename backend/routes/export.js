@@ -20,6 +20,7 @@ router.get('/excel', requireServiceScope, async (req, res) => {
     const serviceId = req.query.service_id || req.scopedServiceId;
     const dateDebut = req.query.date_debut;
     const dateFin = req.query.date_fin;
+    const celluleId = req.query.cellule_id || null;
 
     if (!serviceId || !dateDebut || !dateFin) {
       return res.status(400).json({ error: 'service_id, date_debut, date_fin requis' });
@@ -27,13 +28,23 @@ router.get('/excel', requireServiceScope, async (req, res) => {
 
     const matrix = await buildMatrix(serviceId, dateDebut, dateFin);
 
+    // Filtre optionnel par cellule
+    if (celluleId) {
+      matrix.agents = matrix.agents.filter(ag => ag.cellule_id === celluleId);
+      const filtered = {};
+      if (matrix.cumuls[celluleId]) filtered[celluleId] = matrix.cumuls[celluleId];
+      matrix.cumuls = filtered;
+    }
+
     // Récupération du service
     const { data: service } = await supabase.from('services').select('nom').eq('id', serviceId).single();
+
+    const fmtDate = (iso) => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
 
     const wb = XLSX.utils.book_new();
 
     // ---- Feuille 1 : Matrice Réel ----
-    const headerRow = ['Cellule', 'Spécialité', 'Nom', 'Prénom', 'Matricule', ...matrix.dates];
+    const headerRow = ['Cellule', 'Spécialité', 'Nom', 'Prénom', 'Matricule', ...matrix.dates.map(fmtDate)];
 
     const cellulesMap = {};
     matrix.cellules.forEach(c => { cellulesMap[c.id] = c.nom; });
@@ -91,7 +102,7 @@ router.get('/excel', requireServiceScope, async (req, res) => {
     Object.entries(matrix.cumuls).forEach(([celluleId, datesCumuls]) => {
       const celluleName = cellulesMap[celluleId] || celluleId;
       Object.entries(datesCumuls).forEach(([date, cums]) => {
-        cumsRows.push([celluleName, date, cums.matin, cums.apres_midi, cums.nuit, cums.journee]);
+        cumsRows.push([celluleName, fmtDate(date), cums.matin, cums.apres_midi, cums.nuit, cums.journee]);
       });
     });
 

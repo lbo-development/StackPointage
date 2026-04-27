@@ -44,9 +44,10 @@ export default function AppShell() {
   }, [api]);
 
   const navItems = [
-    { path: '/matrice',       label: 'Matrice',       icon: '▦', show: true },
-    { path: '/convocations',  label: 'Convocations',  icon: '✉', show: !isAgent },
-    { path: '/mon-espace',    label: 'Mon Espace',    icon: '◎', show: !isViewer },
+    { path: '/matrice',           label: 'Matrice',       icon: '▦', show: true },
+    { path: '/convocations',      label: 'Convocations',  icon: '✉', show: !isAgent },
+    { path: '/export-catalogue',  label: 'Exports',       icon: '⬇', show: !isAgent },
+    { path: '/mon-espace',        label: 'Mon Espace',    icon: '◎', show: !isViewer },
   ].filter(n => n.show);
 
   const settingsItems = [

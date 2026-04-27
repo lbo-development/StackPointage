@@ -240,7 +240,7 @@ export default function PointageMatrixPage() {
         {/* 1. Rafraîchir */}
         <button className="btn btn-sm btn-icon" onClick={loadMatrix} title="Rafraîchir">↺</button>
 
-        {/* 2. Nom service / cellule */}
+        {/* 3. Nom service / cellule */}
         {selectedService && (
           <span className="toolbar-context">
             {selectedService.nom}{selectedCellule ? ` › ${selectedCellule.nom}` : ''}
