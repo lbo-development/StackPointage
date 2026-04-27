@@ -373,6 +373,27 @@ function fileToBase64(file) {
   });
 }
 
+const PHOTO_MAX_SIZE = 5 * 1024 * 1024; // 5 Mo
+const PHOTO_ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+
+// Lit les magic bytes réels du fichier — résout toujours (null si non reconnu ou erreur)
+function detectImageMime(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve(null);
+    reader.onloadend = () => {
+      if (!reader.result) return resolve(null);
+      const b = new Uint8Array(reader.result);
+      if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return resolve('image/jpeg');
+      if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return resolve('image/png');
+      if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+          b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return resolve('image/webp');
+      resolve(null);
+    };
+    reader.readAsArrayBuffer(file.slice(0, 12));
+  });
+}
+
 function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
   const [nom, setNom] = useState(agent?.agents?.nom || '');
   const [prenom, setPrenom] = useState(agent?.agents?.prenom || '');
@@ -401,8 +422,10 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
 
   const originalPhotoUrl = agent?.agents?.photo_url || null;
   const [photoFile, setPhotoFile] = useState(null);
+  const [photoMime, setPhotoMime] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(originalPhotoUrl);
   const [photoDragging, setPhotoDragging] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -418,10 +441,23 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
     }).catch(console.error);
   }, [serviceId]);
 
-  function handleFileChange(file) {
-    if (!file || !file.type.startsWith('image/')) return;
+  async function handleFileChange(file) {
+    if (!file) return;
+    setPhotoError('');
+    if (file.size > PHOTO_MAX_SIZE) {
+      setPhotoError('La photo ne doit pas dépasser 5 Mo.');
+      return;
+    }
+    const detected = await detectImageMime(file);
+    const mimeToUse = detected || (PHOTO_ALLOWED.includes(file.type) ? file.type : null);
+    if (!mimeToUse) {
+      setPhotoError('Format non supporté. Utilisez JPEG, PNG ou WebP.');
+      return;
+    }
+    setPhotoMime(mimeToUse);
     setPhotoFile(file);
     setPhotoPreview(URL.createObjectURL(file));
+    if (fileRef.current) fileRef.current.value = '';
   }
 
   function handleFileDrop(e) {
@@ -467,7 +503,7 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
 
       if (photoFile) {
         const base64 = await fileToBase64(photoFile);
-        await api.post(`/agents/${agentId}/photo`, { data: base64, mimeType: photoFile.type });
+        await api.post(`/agents/${agentId}/photo`, { data: base64, mimeType: photoMime });
       } else if (!photoPreview && originalPhotoUrl) {
         await api.delete(`/agents/${agentId}/photo`);
       }
@@ -489,67 +525,60 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
         </div>
         <div className="modal-body">
 
-          {/* ── Photo ── */}
-          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
-            <div
-              onDragOver={e => { e.preventDefault(); setPhotoDragging(true); }}
-              onDragLeave={() => setPhotoDragging(false)}
-              onDrop={handleFileDrop}
-              onClick={() => fileRef.current?.click()}
-              style={{
-                width: 80, height: 80, borderRadius: '50%', flexShrink: 0,
-                border: `2px dashed ${photoDragging ? 'var(--accent)' : 'var(--border)'}`,
-                cursor: 'pointer', overflow: 'hidden',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: photoDragging ? 'var(--bg-hover)' : 'var(--bg-surface)',
-                transition: 'border-color 0.15s, background 0.15s',
-              }}
-            >
-              {photoPreview
-                ? <img src={photoPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <span style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
-                    Glisser photo
-                  </span>
-              }
-            </div>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 4 }}>
-                Photo d'identité
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                Glissez une image ou cliquez sur le cercle
+          {/* ── Photo + Nom/Prénom ── */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              <div
+                onDragOver={e => { e.preventDefault(); setPhotoDragging(true); }}
+                onDragLeave={() => setPhotoDragging(false)}
+                onDrop={handleFileDrop}
+                onClick={() => fileRef.current?.click()}
+                title="Photo d'identité — cliquer ou glisser (JPEG, PNG, WebP · max 5 Mo)"
+                style={{
+                  width: 60, height: 60, borderRadius: '50%',
+                  border: `2px dashed ${photoDragging ? 'var(--accent)' : 'var(--border)'}`,
+                  cursor: 'pointer', overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: photoDragging ? 'var(--bg-hover)' : 'var(--bg-surface)',
+                  transition: 'border-color 0.15s, background 0.15s',
+                }}
+              >
+                {photoPreview
+                  ? <img src={photoPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <span style={{ fontSize: 9, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3, padding: '0 6px' }}>Photo</span>
+                }
               </div>
               {photoPreview && (
                 <button
                   type="button"
                   className="btn btn-sm"
-                  onClick={e => { e.stopPropagation(); setPhotoFile(null); setPhotoPreview(null); }}
-                  style={{ fontSize: 10 }}
+                  onClick={e => { e.stopPropagation(); setPhotoFile(null); setPhotoMime(null); setPhotoPreview(null); setPhotoError(''); }}
+                  style={{ fontSize: 9, padding: '1px 6px' }}
                 >
-                  Supprimer la photo
+                  Retirer
                 </button>
               )}
             </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={e => handleFileChange(e.target.files[0])}
-            />
+            <div style={{ flex: 1 }}>
+              <div className="form-row" style={{ marginBottom: 0 }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label>Nom *</label>
+                  <input value={nom} onChange={e => setNom(e.target.value)} />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label>Prénom</label>
+                  <input value={prenom} onChange={e => setPrenom(e.target.value)} />
+                </div>
+              </div>
+              {photoError && (
+                <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>{photoError}</div>
+              )}
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={e => handleFileChange(e.target.files[0])} />
           </div>
 
           {/* ── Identité ── */}
-          <div className="form-row">
-            <div className="form-group" style={{ flex: 1 }}>
-              <label>Nom *</label>
-              <input value={nom} onChange={e => setNom(e.target.value)} />
-            </div>
-            <div className="form-group" style={{ flex: 1 }}>
-              <label>Prénom</label>
-              <input value={prenom} onChange={e => setPrenom(e.target.value)} />
-            </div>
-          </div>
           <div className="form-row">
             <div className="form-group" style={{ flex: 1 }}>
               <label>Matricule *</label>
@@ -582,7 +611,7 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
           {/* ── Affectation ── */}
           {serviceId && (
             <>
-              <div style={{ borderTop: '1px solid var(--border)', margin: '6px 0 10px', paddingTop: 8 }}>
+              <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0 8px', paddingTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
                   Affectation
                 </span>

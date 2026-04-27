@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 
 import authRoutes from "./routes/auth.js";
 import agentsRoutes from "./routes/agents.js";
@@ -20,15 +21,33 @@ import statsRoutes from "./routes/stats.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Headers de sécurité HTTP (API JSON pure : CSP et COEP désactivés)
+app.use(
+  helmet({
+    contentSecurityPolicy: false,      // Pas de HTML servi
+    crossOriginEmbedderPolicy: false,  // Pas nécessaire pour une API
+  }),
+);
+
 // CORS restreint aux origines autorisées (FRONTEND_URL en prod, localhost en dev)
 const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
   .split(",")
   .map((u) => u.trim());
 
+// En prod (FRONTEND_URL non-localhost), on exige un Origin explicite
+const isProd = allowedOrigins.every((o) => !o.includes("localhost"));
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) {
+        // Dev : le proxy Vite ne transmet pas l'Origin → on laisse passer
+        // Prod : toute requête sans Origin est rejetée (Postman, curl, etc.)
+        return isProd
+          ? callback(new Error("Origine CORS manquante"))
+          : callback(null, true);
+      }
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`Origine CORS non autorisée : ${origin}`));
