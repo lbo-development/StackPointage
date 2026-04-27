@@ -2,9 +2,11 @@ import { Router } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { authMiddleware } from '../middlewares/auth.js';
 import { requireRole } from '../middlewares/role.js';
+import { chatLimiter } from '../middlewares/rateLimiter.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(chatLimiter);
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

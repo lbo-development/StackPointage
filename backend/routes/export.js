@@ -2,11 +2,13 @@ import { Router } from 'express';
 import * as XLSX from 'xlsx';
 import { authMiddleware } from '../middlewares/auth.js';
 import { requireRole, requireServiceScope } from '../middlewares/role.js';
+import { exportLimiter } from '../middlewares/rateLimiter.js';
 import { buildMatrix } from '../services/matrixService.js';
 import { supabase } from '../supabase.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(exportLimiter);
 
 /**
  * GET /api/export/excel
