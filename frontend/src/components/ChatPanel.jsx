@@ -104,7 +104,7 @@ const SUGGESTIONS = [
   'Quels agents ont des alertes sur les cumuls ?',
 ];
 
-export default function ChatPanel({ matrixContext }) {
+export default function ChatPanel({ matrixContext, meta }) {
   const { api } = useAuth();
   const [open, setOpen]       = useState(false);
   const [messages, setMessages] = useState([]);
@@ -134,6 +134,7 @@ export default function ChatPanel({ matrixContext }) {
       const res = await api.post('/chat', {
         messages: next,
         context: matrixContext,
+        meta,
       });
       setMessages(prev => [...prev, { role: 'assistant', content: res.content }]);
     } catch (e) {
@@ -194,7 +195,7 @@ export default function ChatPanel({ matrixContext }) {
             }}>✦</span>
             <span style={{ fontWeight: 600, fontSize: 13 }}>Assistant SIPRA</span>
             <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 4 }}>
-              {matrixContext ? 'Matrice chargée' : 'Pas de données'}
+              {matrixContext ? 'Matrice chargée' : meta?.serviceId ? 'Accès DB actif' : 'Aucun service'}
             </span>
             {messages.length > 0 && (
               <button
@@ -223,9 +224,11 @@ export default function ChatPanel({ matrixContext }) {
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', marginBottom: 4 }}>
                   {matrixContext
                     ? 'Posez une question sur les données affichées.'
-                    : 'Chargez une matrice pour activer l\'analyse.'}
+                    : meta?.serviceId
+                      ? 'Posez une question — le bot peut interroger la base de données.'
+                      : 'Sélectionnez un service pour activer l\'assistant.'}
                 </div>
-                {matrixContext && SUGGESTIONS.map((s, i) => (
+                {(matrixContext || meta?.serviceId) && SUGGESTIONS.map((s, i) => (
                   <button
                     key={i}
                     onClick={() => send(s)}
@@ -299,13 +302,13 @@ export default function ChatPanel({ matrixContext }) {
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
               }}
-              placeholder={matrixContext ? 'Posez votre question…' : 'Chargez une matrice d\'abord'}
-              disabled={loading || !matrixContext}
+              placeholder={meta?.serviceId ? 'Posez votre question…' : 'Sélectionnez un service d\'abord'}
+              disabled={loading || !meta?.serviceId}
             />
             <button
               className="btn btn-primary btn-sm"
               onClick={() => send()}
-              disabled={loading || !input.trim() || !matrixContext}
+              disabled={loading || !input.trim() || !meta?.serviceId}
               style={{ flexShrink: 0, padding: '0 12px', fontSize: 14 }}
             >
               ↑

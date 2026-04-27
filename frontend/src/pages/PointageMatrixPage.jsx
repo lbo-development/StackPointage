@@ -336,7 +336,17 @@ export default function PointageMatrixPage() {
         />
       )}
 
-      {canUseChat && <ChatPanel matrixContext={matrixContext} />}
+      {canUseChat && (
+        <ChatPanel
+          matrixContext={matrixContext}
+          meta={{
+            serviceId: selectedService?.id || profile?.service_id,
+            serviceName: selectedService?.nom,
+            dateDebut,
+            dateFin,
+          }}
+        />
+      )}
     </div>
   );
 }
