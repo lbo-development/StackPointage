@@ -38,8 +38,30 @@ router.post('/login', async (req, res) => {
     }
   }
 
-  // Les tokens restent dans les cookies httpOnly — ne pas les renvoyer dans le body
-  res.json({ profile });
+  // Tokens dans le body pour le stockage localStorage (iOS Safari compatible)
+  res.json({
+    profile,
+    access_token:  data.session.access_token,
+    refresh_token: data.session.refresh_token,
+    expires_in:    data.session.expires_in,
+  });
+});
+
+router.post('/refresh', async (req, res) => {
+  const { refresh_token } = req.body;
+  if (!refresh_token) return res.status(400).json({ error: 'refresh_token requis' });
+
+  const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+  if (error || !data?.session) {
+    return res.status(401).json({ error: 'Session expirée, reconnectez-vous' });
+  }
+
+  setAuthCookies(res, data.session);
+  res.json({
+    access_token:  data.session.access_token,
+    refresh_token: data.session.refresh_token,
+    expires_in:    data.session.expires_in,
+  });
 });
 
 router.post('/logout', (req, res) => {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -9,17 +9,67 @@ const API_BASE = import.meta.env.VITE_API_URL
   : '/api';
 
 // ============================================================
-// API CLIENT — tokens dans les cookies httpOnly, pas de header Authorization
+// TOKEN STORAGE — localStorage (iOS Safari / ITP compatible)
 // ============================================================
-export function createApiClient(onUnauthorized) {
-  async function request(method, path, body) {
+function saveTokens({ access_token, refresh_token, expires_in }) {
+  localStorage.setItem('sb_access', access_token);
+  localStorage.setItem('sb_refresh', refresh_token);
+  const expiresAt = Math.floor(Date.now() / 1000) + (expires_in || 3600);
+  localStorage.setItem('sb_expires_at', String(expiresAt));
+}
+
+function clearTokens() {
+  localStorage.removeItem('sb_access');
+  localStorage.removeItem('sb_refresh');
+  localStorage.removeItem('sb_expires_at');
+}
+
+function loadTokens() {
+  return {
+    access_token:  localStorage.getItem('sb_access'),
+    refresh_token: localStorage.getItem('sb_refresh'),
+    expires_at:    parseInt(localStorage.getItem('sb_expires_at') || '0', 10),
+  };
+}
+
+async function doRefresh(refresh_token) {
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// API CLIENT — Authorization: Bearer header
+// ============================================================
+export function createApiClient(tokenRef, onTokenExpired, onUnauthorized) {
+  async function request(method, path, body, isRetry = false) {
+    const token = tokenRef.current;
+    if (!token) { onUnauthorized?.(); throw new Error('Non authentifié'); }
+
     const res = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
       credentials: 'include',
       body: body ? JSON.stringify(body) : undefined,
     });
+
     if (res.status === 401) {
+      const data = await res.json().catch(() => ({}));
+      if (!isRetry && data.code === 'TOKEN_EXPIRED') {
+        const refreshed = await onTokenExpired();
+        if (refreshed) return request(method, path, body, true);
+      }
       onUnauthorized?.();
       throw new Error('Session expirée');
     }
@@ -37,10 +87,12 @@ export function createApiClient(onUnauthorized) {
     patch:  (path, body) => request('PATCH',  path, body),
     delete: (path)       => request('DELETE', path),
 
-    // Export spécial (blob)
     downloadExcel: async (params) => {
+      const token = tokenRef.current;
+      if (!token) throw new Error('Non authentifié');
       const qs = new URLSearchParams(params).toString();
       const res = await fetch(`${API_BASE}/export/excel?${qs}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Export échoué');
@@ -61,15 +113,60 @@ export function createApiClient(onUnauthorized) {
 export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const tokenRef = useRef(null);
 
-  // Restauration de session au montage via cookie httpOnly
-  useEffect(() => {
-    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (data?.profile) setProfile(data.profile); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const handleUnauthorized = useCallback(() => {
+    clearTokens();
+    tokenRef.current = null;
+    setProfile(null);
   }, []);
+
+  const handleTokenExpired = useCallback(async () => {
+    const { refresh_token } = loadTokens();
+    if (!refresh_token) { handleUnauthorized(); return false; }
+    const data = await doRefresh(refresh_token);
+    if (!data?.access_token) { handleUnauthorized(); return false; }
+    saveTokens(data);
+    tokenRef.current = data.access_token;
+    return true;
+  }, [handleUnauthorized]);
+
+  // Restauration de session au montage depuis localStorage
+  useEffect(() => {
+    const { access_token, refresh_token, expires_at } = loadTokens();
+    if (!access_token) { setLoading(false); return; }
+
+    const now = Math.floor(Date.now() / 1000);
+    const needsRefresh = expires_at > 0 && expires_at - now < 60;
+
+    (async () => {
+      try {
+        let token = access_token;
+        if (needsRefresh) {
+          const refreshed = await doRefresh(refresh_token);
+          if (!refreshed?.access_token) { clearTokens(); setLoading(false); return; }
+          saveTokens(refreshed);
+          token = refreshed.access_token;
+        }
+        tokenRef.current = token;
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.profile) setProfile(data.profile);
+          else { clearTokens(); tokenRef.current = null; }
+        } else {
+          clearTokens(); tokenRef.current = null;
+        }
+      } catch {
+        clearTokens(); tokenRef.current = null;
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = useCallback(async (email, password) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
@@ -83,6 +180,8 @@ export function AuthProvider({ children }) {
       throw new Error(err.error || 'Connexion échouée');
     }
     const data = await res.json();
+    saveTokens(data);
+    tokenRef.current = data.access_token;
     setProfile(data.profile);
     return data;
   }, []);
@@ -92,12 +191,13 @@ export function AuthProvider({ children }) {
       method: 'POST',
       credentials: 'include',
     }).catch(() => {});
+    clearTokens();
+    tokenRef.current = null;
     setProfile(null);
   }, []);
 
-  // Déconnexion automatique si un appel API reçoit un 401
   const api = profile
-    ? createApiClient(() => setProfile(null))
+    ? createApiClient(tokenRef, handleTokenExpired, handleUnauthorized)
     : null;
 
   const can = useCallback((action) => {
