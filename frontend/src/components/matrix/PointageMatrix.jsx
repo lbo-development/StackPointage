@@ -352,9 +352,11 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
 
     if (row.type === 'cellule-header') {
       return (
-        <tr key={`R-ch-${row.cellule.id}`} style={{ height: h }}>
+        <tr key={`R-ch-${row.cellule.id}`}>
           {dates.map(dateStr => (
-            <td key={dateStr} style={{ background: 'var(--bg-hover)', height: h, maxHeight: h, borderTop: '1px solid var(--border-light)' }} />
+            <td key={dateStr} style={{ background: 'var(--bg-hover)', padding: 0 }}>
+              <div style={{ height: h, overflow: 'hidden', boxShadow: 'inset 0 1px 0 var(--border-light)' }} />
+            </td>
           ))}
         </tr>
       );
@@ -362,9 +364,11 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
 
     if (row.type === 'specialite-header') {
       return (
-        <tr key={`R-sh-${row.cellule_id}-${row.spec?.id}`} style={{ height: h }}>
+        <tr key={`R-sh-${row.cellule_id}-${row.spec?.id}`}>
           {dates.map(dateStr => (
-            <td key={dateStr} style={{ background: 'var(--bg-app)', height: h, maxHeight: h }} />
+            <td key={dateStr} style={{ background: 'var(--bg-app)', padding: 0 }}>
+              <div style={{ height: h, overflow: 'hidden' }} />
+            </td>
           ))}
         </tr>
       );
@@ -387,15 +391,18 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
               }
             })();
             return (
-              <td key={dateStr} style={{
-                background: isAlert ? 'rgba(239,68,68,0.08)' : 'var(--bg-panel)',
-                fontSize: 11, textAlign: 'center', fontFamily: 'var(--font-mono)',
-                color: count > 0 ? (isAlert ? '#ef4444' : (cfg.couleur || 'var(--accent)')) : 'transparent',
-                fontWeight: 700,
-                border: '1px solid var(--border-grid)',
-                height: h, maxHeight: h,
-              }}>
-                {count > 0 ? count : ''}
+              <td key={dateStr} style={{ padding: 0 }}>
+                <div style={{
+                  height: h, overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: isAlert ? 'rgba(239,68,68,0.08)' : 'var(--bg-panel)',
+                  fontSize: 11, fontFamily: 'var(--font-mono)',
+                  color: count > 0 ? (isAlert ? '#ef4444' : (cfg.couleur || 'var(--accent)')) : 'transparent',
+                  fontWeight: 700,
+                  boxShadow: 'inset 0 1px 0 var(--border-grid), inset 0 -1px 0 var(--border-grid)',
+                }}>
+                  {count > 0 ? count : ''}
+                </div>
               </td>
             );
           })}
@@ -544,7 +551,7 @@ export default function PointageMatrix({ data, mode, canEdit, canViewStats = tru
                     borderLeft: i === 0 ? 'none' : '2px solid var(--border-light)',
                     color: 'var(--text-primary)', fontWeight: 700, fontSize: 11,
                     textAlign: 'center', textTransform: 'capitalize',
-                    padding: 0, height: HEAD_H1,
+                    padding: 0, height: HEAD_H1, overflow: 'hidden', whiteSpace: 'nowrap',
                   }}>
                     {g.label}
                   </th>

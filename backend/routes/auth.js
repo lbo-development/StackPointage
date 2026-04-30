@@ -42,7 +42,7 @@ router.post('/login', async (req, res) => {
   res.json({ profile });
 });
 
-router.post('/logout', authMiddleware, (req, res) => {
+router.post('/logout', (req, res) => {
   clearAuthCookies(res);
   res.json({ ok: true });
 });
