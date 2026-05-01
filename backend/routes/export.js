@@ -9,38 +9,27 @@ import { supabase } from '../supabase.js';
 
 const router = Router();
 router.use(authMiddleware);
-router.use(exportLimiter);
 
-// Nom du bucket Supabase Storage — configurable via STORAGE_BUCKET (défaut : documents)
-const STORAGE_BUCKET = process.env.STORAGE_BUCKET || 'documents';
-const getStorageBucket = () => STORAGE_BUCKET;
+// Supabase Storage — configurable via variables d'environnement
+const STORAGE_BUCKET          = process.env.STORAGE_BUCKET          || 'documents';
+const STORAGE_TEMPLATE_FOLDER = process.env.STORAGE_TEMPLATE_FOLDER || 'template';
 
 /**
  * GET /api/export/templates
- * Liste les fichiers .xlsx dans le bucket documents/template
+ * Liste les fichiers .xlsx dans STORAGE_BUCKET/STORAGE_TEMPLATE_FOLDER
  */
 router.get('/templates', async (req, res) => {
-  const bucket = getStorageBucket();
-
-  // Lister la racine du bucket pour voir la structure réelle
-  const { data: rootItems } = await supabase.storage.from(bucket).list('', { limit: 100 });
-  const rootNames = (rootItems || []).map(f => f.name);
-
-  // Chercher le dossier template (insensible à la casse, singulier ou pluriel)
-  const templateFolder = rootNames.find(n => /^templates?$/i.test(n)) || 'template';
+  const bucket         = STORAGE_BUCKET;
+  const templateFolder = STORAGE_TEMPLATE_FOLDER;
 
   const { data, error } = await supabase.storage
     .from(bucket)
     .list(templateFolder, { sortBy: { column: 'name', order: 'asc' } });
 
   if (error) {
-    return res.status(500).json({
-      error: `Bucket "${bucket}" accessible mais dossier "${templateFolder}" introuvable : ${error.message}`,
-      _structure: rootNames,
-    });
+    return res.status(500).json({ error: `Impossible d'accéder au dossier "${templateFolder}" (bucket: ${bucket}) : ${error.message}` });
   }
 
-  const allFiles  = (data || []).map(f => f.name);
   const templates = (data || [])
     .filter(f => f.name && !f.name.startsWith('.') && /\.(xlsx|xltx)$/i.test(f.name))
     .map(f => ({
@@ -50,14 +39,10 @@ router.get('/templates', async (req, res) => {
     }));
 
   if (templates.length === 0) {
-    // Renvoie la structure du bucket pour aider au diagnostic
     return res.status(200).json({
-      _empty: true,
+      _empty:  true,
       _bucket: bucket,
       _folder: templateFolder,
-      _rootContents: rootNames,
-      _folderContents: allFiles,
-      templates: [],
     });
   }
 
@@ -70,7 +55,7 @@ router.get('/templates', async (req, res) => {
  * Si template_path est fourni, injecte les données dans le template Supabase Storage.
  * Sinon, génère un fichier from scratch (comportement actuel).
  */
-router.get('/excel', requireServiceScope, async (req, res) => {
+router.get('/excel', exportLimiter, requireServiceScope, async (req, res) => {
   try {
     const serviceId    = req.query.service_id || req.scopedServiceId;
     const dateDebut    = req.query.date_debut;

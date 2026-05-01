@@ -3,10 +3,11 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { fmtDate } from '../utils/date.js';
 
 export default function ExportCataloguePage() {
-  const { api, isAdmin, isAdminService } = useAuth();
+  const { api, isAdmin, isAdminService, isAssistantRH } = useAuth();
   const [entries, setEntries]       = useState([]);
   const [showModal, setShowModal]   = useState(false);
   const [editEntry, setEditEntry]   = useState(null);
+  const [datesOnly, setDatesOnly]   = useState(false);
   const [downloading, setDownloading] = useState(null);
 
   function load() {
@@ -40,7 +41,8 @@ export default function ExportCataloguePage() {
     }
   }
 
-  const canEdit = isAdmin || isAdminService;
+  const canEdit      = isAdmin;
+  const canEditDates = isAdminService || isAssistantRH;
 
   return (
     <div className="page-wrapper">
@@ -106,13 +108,18 @@ export default function ExportCataloguePage() {
                   </button>
                   {canEdit && (
                     <>
-                      <button className="btn btn-sm" onClick={() => { setEditEntry(e); setShowModal(true); }}>
+                      <button className="btn btn-sm" onClick={() => { setEditEntry(e); setDatesOnly(false); setShowModal(true); }}>
                         Modifier
                       </button>
                       <button className="btn btn-sm btn-danger" onClick={() => handleDelete(e.id)}>
                         Supprimer
                       </button>
                     </>
+                  )}
+                  {!canEdit && canEditDates && (
+                    <button className="btn btn-sm" onClick={() => { setEditEntry(e); setDatesOnly(true); setShowModal(true); }}>
+                      Modifier dates
+                    </button>
                   )}
                 </div>
               </td>
@@ -124,6 +131,7 @@ export default function ExportCataloguePage() {
       {showModal && (
         <CatalogueModal
           entry={editEntry}
+          datesOnly={datesOnly}
           api={api}
           onClose={() => setShowModal(false)}
           onSaved={() => { setShowModal(false); load(); }}
@@ -133,7 +141,7 @@ export default function ExportCataloguePage() {
   );
 }
 
-function CatalogueModal({ entry, api, onClose, onSaved }) {
+function CatalogueModal({ entry, datesOnly, api, onClose, onSaved }) {
   const [form, setForm] = useState({
     nom:           entry?.nom           || '',
     service_id:    entry?.service_id    || '',
@@ -159,10 +167,8 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
           setTemplatesError('');
         } else if (data._empty) {
           setTemplates([]);
-          const root = (data._rootContents || []).join(', ') || '(vide)';
-          const folder = (data._folderContents || []).join(', ') || '(vide)';
           setTemplatesError(
-            `Bucket: ${data._bucket} | Racine: [${root}] | Dossier "${data._folder}": [${folder}]`
+            `Aucun fichier .xlsx dans le dossier "${data._folder}" du bucket "${data._bucket}". Uploadez votre template dans Storage > ${data._bucket} > ${data._folder}.`
           );
         }
       })
@@ -183,14 +189,20 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
   }
 
   async function handleSave() {
-    if (!form.nom || !form.service_id || !form.date_debut || !form.date_fin) {
+    if (!form.date_debut || !form.date_fin) {
+      setError('Veuillez remplir les dates.');
+      return;
+    }
+    if (!datesOnly && (!form.nom || !form.service_id)) {
       setError('Veuillez remplir tous les champs obligatoires.');
       return;
     }
     setSaving(true);
     setError('');
     try {
-      if (entry) {
+      if (datesOnly) {
+        await api.patch(`/export-catalogue/${entry.id}/dates`, { date_debut: form.date_debut, date_fin: form.date_fin });
+      } else if (entry) {
         await api.put(`/export-catalogue/${entry.id}`, form);
       } else {
         await api.post('/export-catalogue', form);
@@ -206,38 +218,51 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{entry ? "Modifier l'état" : "Nouvel état d'export"}</span>
+          <span className="modal-title">
+            {datesOnly ? 'Modifier les dates' : entry ? "Modifier l'état" : "Nouvel état d'export"}
+          </span>
           <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
           {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
 
-          <div className="form-group">
-            <label>Nom *</label>
-            <input
-              type="text"
-              value={form.nom}
-              onChange={e => set('nom', e.target.value)}
-              placeholder="Ex : Pointage BT Juin 2026"
-              autoFocus
-            />
-          </div>
+          {!datesOnly && (
+            <>
+              <div className="form-group">
+                <label>Nom *</label>
+                <input
+                  type="text"
+                  value={form.nom}
+                  onChange={e => set('nom', e.target.value)}
+                  placeholder="Ex : Pointage BT Juin 2026"
+                  autoFocus
+                />
+              </div>
 
-          <div className="form-group">
-            <label>Service *</label>
-            <select value={form.service_id} onChange={e => set('service_id', e.target.value)}>
-              <option value="">— Choisir un service —</option>
-              {services.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
-            </select>
-          </div>
+              <div className="form-group">
+                <label>Service *</label>
+                <select value={form.service_id} onChange={e => set('service_id', e.target.value)}>
+                  <option value="">— Choisir un service —</option>
+                  {services.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
+                </select>
+              </div>
 
-          <div className="form-group">
-            <label>Cellule <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optionnel)</span></label>
-            <select value={form.cellule_id} onChange={e => set('cellule_id', e.target.value)} disabled={!form.service_id}>
-              <option value="">— Toutes les cellules —</option>
-              {cellules.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
-            </select>
-          </div>
+              <div className="form-group">
+                <label>Cellule <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optionnel)</span></label>
+                <select value={form.cellule_id} onChange={e => set('cellule_id', e.target.value)} disabled={!form.service_id}>
+                  <option value="">— Toutes les cellules —</option>
+                  {cellules.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          {datesOnly && entry && (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+              <strong style={{ color: 'var(--text)' }}>{entry.nom}</strong>
+              {entry.services?.nom && <span> — {entry.services.nom}</span>}
+            </div>
+          )}
 
           <div className="form-row">
             <div className="form-group" style={{ flex: 1 }}>
@@ -250,7 +275,7 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
             </div>
           </div>
 
-          <div className="form-group">
+          {!datesOnly && <div className="form-group">
             <label>
               Template Excel
               <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>(optionnel)</span>
@@ -271,7 +296,7 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
                 Aucun fichier .xlsx trouvé dans le bucket — vérifiez STORAGE_BUCKET dans le .env
               </span>
             )}
-          </div>
+          </div>}
         </div>
 
         <div className="modal-footer">

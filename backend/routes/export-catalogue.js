@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/export-catalogue
-router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => {
+router.post('/', requireRole('admin_app'), async (req, res) => {
   try {
     const { nom, service_id, cellule_id, date_debut, date_fin, template_path } = req.body;
     if (!nom || !service_id || !date_debut || !date_fin) {
@@ -50,7 +50,7 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
 });
 
 // PUT /api/export-catalogue/:id
-router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
+router.put('/:id', requireRole('admin_app'), async (req, res) => {
   try {
     const { nom, service_id, cellule_id, date_debut, date_fin, template_path } = req.body;
     if (!nom || !service_id || !date_debut || !date_fin) {
@@ -70,8 +70,29 @@ router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) =
   }
 });
 
+// PATCH /api/export-catalogue/:id/dates — admin_service et assistant_rh peuvent modifier uniquement les dates
+router.patch('/:id/dates', requireRole('admin_app', 'admin_service', 'assistant_rh'), async (req, res) => {
+  try {
+    const { date_debut, date_fin } = req.body;
+    if (!date_debut || !date_fin) {
+      return res.status(400).json({ error: 'date_debut et date_fin requis' });
+    }
+    const { data, error } = await supabase
+      .from('export_catalogues')
+      .update({ date_debut, date_fin })
+      .eq('id', req.params.id)
+      .select('*, services(nom), cellules(nom)')
+      .single();
+    if (error) { console.error('export-catalogue PATCH dates:', error); return res.status(500).json({ error: error.message }); }
+    res.json(data);
+  } catch (err) {
+    console.error('export-catalogue PATCH dates:', err);
+    res.status(500).json({ error: err.message || 'Erreur serveur interne.' });
+  }
+});
+
 // DELETE /api/export-catalogue/:id
-router.delete('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
+router.delete('/:id', requireRole('admin_app'), async (req, res) => {
   try {
     const { error } = await supabase
       .from('export_catalogues')
