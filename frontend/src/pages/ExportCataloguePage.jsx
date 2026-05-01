@@ -4,9 +4,9 @@ import { fmtDate } from '../utils/date.js';
 
 export default function ExportCataloguePage() {
   const { api, isAdmin, isAdminService } = useAuth();
-  const [entries, setEntries] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [editEntry, setEditEntry] = useState(null);
+  const [entries, setEntries]       = useState([]);
+  const [showModal, setShowModal]   = useState(false);
+  const [editEntry, setEditEntry]   = useState(null);
   const [downloading, setDownloading] = useState(null);
 
   function load() {
@@ -25,8 +25,13 @@ export default function ExportCataloguePage() {
   async function handleDownload(entry) {
     setDownloading(entry.id);
     try {
-      const params = { service_id: entry.service_id, date_debut: entry.date_debut, date_fin: entry.date_fin };
-      if (entry.cellule_id) params.cellule_id = entry.cellule_id;
+      const params = {
+        service_id:  entry.service_id,
+        date_debut:  entry.date_debut,
+        date_fin:    entry.date_fin,
+      };
+      if (entry.cellule_id)    params.cellule_id    = entry.cellule_id;
+      if (entry.template_path) params.template_path = entry.template_path;
       await api.downloadExcel(params);
     } catch (err) {
       alert('Export échoué : ' + err.message);
@@ -56,13 +61,14 @@ export default function ExportCataloguePage() {
             <th>Cellule</th>
             <th>Date début</th>
             <th>Date fin</th>
+            <th>Template</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {entries.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>
+              <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>
                 Aucun état configuré
               </td>
             </tr>
@@ -75,6 +81,14 @@ export default function ExportCataloguePage() {
               <td style={{ fontFamily: 'var(--font-mono)' }}>{fmtDate(e.date_debut)}</td>
               <td style={{ fontFamily: 'var(--font-mono)' }}>{fmtDate(e.date_fin)}</td>
               <td>
+                {e.template_path
+                  ? <span style={{ fontSize: 11, color: 'var(--accent)' }}>
+                      {e.template_path.replace('template/', '')}
+                    </span>
+                  : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Standard</span>
+                }
+              </td>
+              <td>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <button
                     className="btn btn-sm btn-icon"
@@ -82,16 +96,13 @@ export default function ExportCataloguePage() {
                     disabled={downloading === e.id}
                     onClick={() => handleDownload(e)}
                   >
-                    {downloading === e.id
-                      ? '…'
-                      : (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                          <polyline points="7 10 12 15 17 10"/>
-                          <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                      )
-                    }
+                    {downloading === e.id ? '…' : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                    )}
                   </button>
                   {canEdit && (
                     <>
@@ -124,19 +135,22 @@ export default function ExportCataloguePage() {
 
 function CatalogueModal({ entry, api, onClose, onSaved }) {
   const [form, setForm] = useState({
-    nom:        entry?.nom        || '',
-    service_id: entry?.service_id || '',
-    cellule_id: entry?.cellule_id || '',
-    date_debut: entry?.date_debut || '',
-    date_fin:   entry?.date_fin   || '',
+    nom:           entry?.nom           || '',
+    service_id:    entry?.service_id    || '',
+    cellule_id:    entry?.cellule_id    || '',
+    date_debut:    entry?.date_debut    || '',
+    date_fin:      entry?.date_fin      || '',
+    template_path: entry?.template_path || '',
   });
-  const [services, setServices] = useState([]);
-  const [cellules, setCellules] = useState([]);
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState('');
+  const [services,  setServices]  = useState([]);
+  const [cellules,  setCellules]  = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [saving,    setSaving]    = useState(false);
+  const [error,     setError]     = useState('');
 
   useEffect(() => {
     api.get('/services').then(setServices).catch(console.error);
+    api.get('/export/templates').then(setTemplates).catch(() => setTemplates([]));
   }, [api]);
 
   useEffect(() => {
@@ -180,9 +194,7 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
           <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          {error && (
-            <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</div>
-          )}
+          {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
 
           <div className="form-group">
             <label>Nom *</label>
@@ -205,11 +217,7 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
 
           <div className="form-group">
             <label>Cellule <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optionnel)</span></label>
-            <select
-              value={form.cellule_id}
-              onChange={e => set('cellule_id', e.target.value)}
-              disabled={!form.service_id}
-            >
+            <select value={form.cellule_id} onChange={e => set('cellule_id', e.target.value)} disabled={!form.service_id}>
               <option value="">— Toutes les cellules —</option>
               {cellules.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
             </select>
@@ -225,7 +233,26 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
               <input type="date" value={form.date_fin} onChange={e => set('date_fin', e.target.value)} />
             </div>
           </div>
+
+          <div className="form-group">
+            <label>
+              Template Excel
+              <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>(optionnel)</span>
+            </label>
+            <select value={form.template_path} onChange={e => set('template_path', e.target.value)}>
+              <option value="">— Export standard (sans template) —</option>
+              {templates.map(t => (
+                <option key={t.path} value={t.path}>{t.nom}</option>
+              ))}
+            </select>
+            {templates.length === 0 && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
+                Aucun template dans le bucket documents/template
+              </span>
+            )}
+          </div>
         </div>
+
         <div className="modal-footer">
           <button className="btn" onClick={onClose}>Annuler</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>

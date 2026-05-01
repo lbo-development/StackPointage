@@ -32,41 +32,41 @@ router.get('/', async (req, res) => {
 // POST /api/export-catalogue
 router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => {
   try {
-    const { nom, service_id, cellule_id, date_debut, date_fin } = req.body;
+    const { nom, service_id, cellule_id, date_debut, date_fin, template_path } = req.body;
     if (!nom || !service_id || !date_debut || !date_fin) {
       return res.status(400).json({ error: 'nom, service_id, date_debut, date_fin requis' });
     }
     const { data, error } = await supabase
       .from('export_catalogues')
-      .insert({ nom, service_id, cellule_id: cellule_id || null, date_debut, date_fin, created_by: req.profile.id })
+      .insert({ nom, service_id, cellule_id: cellule_id || null, date_debut, date_fin, template_path: template_path || null, created_by: req.profile.id })
       .select('*, services(nom), cellules(nom)')
       .single();
-    if (error) throw error;
+    if (error) { console.error('export-catalogue POST:', error); return res.status(500).json({ error: error.message }); }
     res.status(201).json(data);
   } catch (err) {
     console.error('export-catalogue POST:', err);
-    res.status(500).json({ error: 'Erreur serveur interne.' });
+    res.status(500).json({ error: err.message || 'Erreur serveur interne.' });
   }
 });
 
 // PUT /api/export-catalogue/:id
 router.put('/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
   try {
-    const { nom, service_id, cellule_id, date_debut, date_fin } = req.body;
+    const { nom, service_id, cellule_id, date_debut, date_fin, template_path } = req.body;
     if (!nom || !service_id || !date_debut || !date_fin) {
       return res.status(400).json({ error: 'nom, service_id, date_debut, date_fin requis' });
     }
     const { data, error } = await supabase
       .from('export_catalogues')
-      .update({ nom, service_id, cellule_id: cellule_id || null, date_debut, date_fin })
+      .update({ nom, service_id, cellule_id: cellule_id || null, date_debut, date_fin, template_path: template_path || null })
       .eq('id', req.params.id)
       .select('*, services(nom), cellules(nom)')
       .single();
-    if (error) throw error;
+    if (error) { console.error('export-catalogue PUT:', error); return res.status(500).json({ error: error.message }); }
     res.json(data);
   } catch (err) {
     console.error('export-catalogue PUT:', err);
-    res.status(500).json({ error: 'Erreur serveur interne.' });
+    res.status(500).json({ error: err.message || 'Erreur serveur interne.' });
   }
 });
 

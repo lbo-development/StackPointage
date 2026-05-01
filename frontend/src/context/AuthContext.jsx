@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
+const INACTIVITY_MS = 15 * 60 * 1000; // 15 minutes
+
 const AuthContext = createContext(null);
 
 // En prod Railway, VITE_API_URL = https://backend.railway.app
@@ -11,24 +13,25 @@ const API_BASE = import.meta.env.VITE_API_URL
 // ============================================================
 // TOKEN STORAGE — localStorage (iOS Safari / ITP compatible)
 // ============================================================
+// sessionStorage : effacé à la fermeture du navigateur (≠ localStorage qui persiste)
 function saveTokens({ access_token, refresh_token, expires_in }) {
-  localStorage.setItem('sb_access', access_token);
-  localStorage.setItem('sb_refresh', refresh_token);
+  sessionStorage.setItem('sb_access', access_token);
+  sessionStorage.setItem('sb_refresh', refresh_token);
   const expiresAt = Math.floor(Date.now() / 1000) + (expires_in || 3600);
-  localStorage.setItem('sb_expires_at', String(expiresAt));
+  sessionStorage.setItem('sb_expires_at', String(expiresAt));
 }
 
 function clearTokens() {
-  localStorage.removeItem('sb_access');
-  localStorage.removeItem('sb_refresh');
-  localStorage.removeItem('sb_expires_at');
+  sessionStorage.removeItem('sb_access');
+  sessionStorage.removeItem('sb_refresh');
+  sessionStorage.removeItem('sb_expires_at');
 }
 
 function loadTokens() {
   return {
-    access_token:  localStorage.getItem('sb_access'),
-    refresh_token: localStorage.getItem('sb_refresh'),
-    expires_at:    parseInt(localStorage.getItem('sb_expires_at') || '0', 10),
+    access_token:  sessionStorage.getItem('sb_access'),
+    refresh_token: sessionStorage.getItem('sb_refresh'),
+    expires_at:    parseInt(sessionStorage.getItem('sb_expires_at') || '0', 10),
   };
 }
 
@@ -95,7 +98,10 @@ export function createApiClient(tokenRef, onTokenExpired, onUnauthorized) {
         headers: { 'Authorization': `Bearer ${token}` },
         credentials: 'include',
       });
-      if (!res.ok) throw new Error('Export échoué');
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || `Erreur ${res.status}`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -168,12 +174,13 @@ export function AuthProvider({ children }) {
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const login = useCallback(async (email, password) => {
+  // credentials: { profile_id, password } ou { email, password } (fallback admin)
+  const login = useCallback(async (credentials) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(credentials),
     });
     if (!res.ok) {
       const err = await res.json();
@@ -195,6 +202,26 @@ export function AuthProvider({ children }) {
     tokenRef.current = null;
     setProfile(null);
   }, []);
+
+  // Déconnexion automatique après 15 min sans interaction utilisateur
+  useEffect(() => {
+    if (!profile) return;
+
+    let timer;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(logout, INACTIVITY_MS);
+    };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+    events.forEach(ev => window.addEventListener(ev, reset, { passive: true }));
+    reset();
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach(ev => window.removeEventListener(ev, reset));
+    };
+  }, [profile, logout]);
 
   const api = profile
     ? createApiClient(tokenRef, handleTokenExpired, handleUnauthorized)
