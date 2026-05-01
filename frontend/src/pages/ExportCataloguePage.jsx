@@ -144,13 +144,29 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
   });
   const [services,  setServices]  = useState([]);
   const [cellules,  setCellules]  = useState([]);
-  const [templates, setTemplates] = useState([]);
+  const [templates,      setTemplates]      = useState([]);
+  const [templatesError, setTemplatesError] = useState('');
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
 
   useEffect(() => {
     api.get('/services').then(setServices).catch(console.error);
-    api.get('/export/templates').then(setTemplates).catch(() => setTemplates([]));
+    api.get('/export/templates')
+      .then(data => {
+        // Réponse diagnostic quand aucun template trouvé
+        if (Array.isArray(data)) {
+          setTemplates(data);
+          setTemplatesError('');
+        } else if (data._empty) {
+          setTemplates([]);
+          const root = (data._rootContents || []).join(', ') || '(vide)';
+          const folder = (data._folderContents || []).join(', ') || '(vide)';
+          setTemplatesError(
+            `Bucket: ${data._bucket} | Racine: [${root}] | Dossier "${data._folder}": [${folder}]`
+          );
+        }
+      })
+      .catch(err => { setTemplates([]); setTemplatesError(err.message); });
   }, [api]);
 
   useEffect(() => {
@@ -245,9 +261,14 @@ function CatalogueModal({ entry, api, onClose, onSaved }) {
                 <option key={t.path} value={t.path}>{t.nom}</option>
               ))}
             </select>
-            {templates.length === 0 && (
+            {templatesError && (
+              <span style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4, display: 'block' }}>
+                Erreur : {templatesError}
+              </span>
+            )}
+            {!templatesError && templates.length === 0 && (
               <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-                Aucun template dans le bucket documents/template
+                Aucun fichier .xlsx trouvé dans le bucket — vérifiez STORAGE_BUCKET dans le .env
               </span>
             )}
           </div>
