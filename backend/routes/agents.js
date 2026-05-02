@@ -7,6 +7,51 @@ import { PHOTO_MAX_BYTES, detectImageMime } from '../lib/imageUtils.js';
 const router = Router();
 router.use(authMiddleware);
 
+// Retourne dateStr - 1 jour (arithmétique UTC pour éviter les décalages DST/timezone)
+function subOneDay(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d - 1));
+  return date.toISOString().split('T')[0];
+}
+
+// Crée la première entrée d'historique de roulement pour une affectation
+async function insertRoulementHistory(assignmentId, roulementId, dateDebut, dateDebutReference) {
+  if (!roulementId) return;
+  await supabase.from('assignment_roulements').insert({
+    assignment_id:        assignmentId,
+    roulement_id:         roulementId,
+    date_debut:           dateDebut,
+    date_fin:             null,
+    date_debut_reference: dateDebutReference || null,
+  });
+}
+
+// Applique un changement de roulement à une date d'effet donnée
+async function applyRoulementChange(assignmentId, roulementId, dateEffet, dateDebutReference) {
+  if (!roulementId || !dateEffet) return;
+  // Ferme les entrées actives dont date_debut < dateEffet
+  await supabase
+    .from('assignment_roulements')
+    .update({ date_fin: subOneDay(dateEffet) })
+    .eq('assignment_id', assignmentId)
+    .is('date_fin', null)
+    .lt('date_debut', dateEffet);
+  // Supprime les entrées actives dont date_debut >= dateEffet (remplacées par la nouvelle)
+  await supabase
+    .from('assignment_roulements')
+    .delete()
+    .eq('assignment_id', assignmentId)
+    .is('date_fin', null);
+  // Insère la nouvelle entrée
+  await supabase.from('assignment_roulements').insert({
+    assignment_id:        assignmentId,
+    roulement_id:         roulementId,
+    date_debut:           dateEffet,
+    date_fin:             null,
+    date_debut_reference: dateDebutReference || null,
+  });
+}
+
 // GET /api/agents — liste avec tri par cellule → ordre → nom
 router.get('/', requireServiceScope, async (req, res) => {
   try {
@@ -61,6 +106,22 @@ router.get('/sans-affectation', requireServiceScope, async (req, res) => {
     }
 
     const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur interne.' });
+  }
+});
+
+// GET /api/agents/assignments/:id/roulements — historique des roulements d'une affectation
+router.get('/assignments/:id/roulements', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('assignment_roulements')
+      .select('*, roulements(nom, longueur_cycle, date_debut_reference, date_ref_par_agent)')
+      .eq('assignment_id', req.params.id)
+      .order('date_debut', { ascending: false });
     if (error) throw error;
     res.json(data || []);
   } catch (err) {
@@ -131,7 +192,7 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
         ? (existingInCellule[0].ordre + 1)
         : 0;
 
-      const { error: errA } = await supabase.from('agent_assignments').insert({
+      const { data: newAssignment, error: errA } = await supabase.from('agent_assignments').insert({
         agent_id: agent.id,
         service_id: assignment.service_id,
         cellule_id: assignment.cellule_id,
@@ -141,8 +202,9 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
         ordre: assignment.ordre ?? nextOrdre,
         is_active: true,
         date_debut_reference: assignment.date_debut_reference || null,
-      });
+      }).select().single();
       if (errA) throw errA;
+      await insertRoulementHistory(newAssignment.id, assignment.roulement_id, assignment.date_debut, assignment.date_debut_reference);
     }
 
     res.status(201).json(agent);
@@ -155,22 +217,28 @@ router.post('/', requireRole('admin_app', 'admin_service'), async (req, res) => 
 // PUT /api/agents/assignments/:id — modifier une affectation
 router.put('/assignments/:id', requireRole('admin_app', 'admin_service'), async (req, res) => {
   try {
-    const { cellule_id, specialite_id, roulement_id, date_debut, date_fin, is_active, date_debut_reference } = req.body;
+    const { cellule_id, specialite_id, roulement_id, date_debut, date_fin, is_active, date_debut_reference, date_effet_roulement } = req.body;
     const { data, error } = await supabase
       .from('agent_assignments')
       .update({
         cellule_id,
-        specialite_id: specialite_id || null,
-        roulement_id: roulement_id || null,
+        specialite_id:        specialite_id || null,
+        roulement_id:         roulement_id || null,
         date_debut,
-        date_fin: date_fin || null,
-        is_active: is_active !== undefined ? is_active : true,
+        date_fin:             date_fin || null,
+        is_active:            is_active !== undefined ? is_active : true,
         date_debut_reference: date_debut_reference || null,
       })
       .eq('id', req.params.id)
       .select()
       .single();
     if (error) throw error;
+
+    // Si une date d'effet est fournie, mettre à jour l'historique des roulements
+    if (date_effet_roulement) {
+      await applyRoulementChange(req.params.id, roulement_id, date_effet_roulement, date_debut_reference);
+    }
+
     res.json(data);
   } catch (err) {
     console.error(err);
@@ -227,6 +295,7 @@ router.post('/:id/assignments', requireRole('admin_app', 'admin_service'), async
       .select()
       .single();
     if (error) throw error;
+    await insertRoulementHistory(data.id, roulement_id, date_debut, date_debut_reference);
     res.status(201).json(data);
   } catch (err) {
     console.error(err);

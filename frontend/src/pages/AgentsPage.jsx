@@ -26,6 +26,7 @@ export default function AgentsPage() {
   const [affectationModal, setAffectationModal] = useState(null);
   const [showSansAff, setShowSansAff] = useState(false);
   const [searchSansAff, setSearchSansAff] = useState('');
+  const [histoRoulementAgent, setHistoRoulementAgent] = useState(null);
 
   function load() {
     if (!api) return;
@@ -232,6 +233,15 @@ export default function AgentsPage() {
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(a.date_debut_reference || a.roulements?.date_debut_reference)}</td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{fmtDate(a.date_debut)}</td>
                     <td style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        className="btn btn-sm btn-icon"
+                        title="Historique des roulements"
+                        onClick={() => setHistoRoulementAgent(a)}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                      </button>
                       {can('edit_agents') && (
                         <button className="btn btn-sm" onClick={() => { setEditAgent(a); setShowModal(true); }}>
                           Éditer
@@ -360,6 +370,15 @@ export default function AgentsPage() {
           onSaved={() => { setAffectationModal(null); load(); }}
         />
       )}
+
+      {/* Modal historique roulements */}
+      {histoRoulementAgent && (
+        <RoulementHistoryModal
+          assignment={histoRoulementAgent}
+          api={api}
+          onClose={() => setHistoRoulementAgent(null)}
+        />
+      )}
     </div>
   );
 }
@@ -403,8 +422,10 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
   const [typeContrat, setTypeContrat] = useState(agent?.agents?.type_contrat || '');
   const [celluleId, setCelluleId] = useState(agent?.cellule_id || '');
   const [specialiteId, setSpecialiteId] = useState(agent?.specialite_id || '');
-  const [roulementId, setRoulementId] = useState(agent?.roulement_id || '');
-  const [dateRefAgent, setDateRefAgent] = useState(agent?.date_debut_reference || '');
+  const originalRoulementId = agent?.roulement_id || '';
+  const [roulementId, setRoulementId]         = useState(originalRoulementId);
+  const [dateRefAgent, setDateRefAgent]        = useState(agent?.date_debut_reference || '');
+  const [dateEffetRoulement, setDateEffetRoulement] = useState(() => new Date().toISOString().split('T')[0]);
   const [dateDebut, setDateDebut] = useState(
     agent?.date_debut || new Date().toISOString().split('T')[0]
   );
@@ -477,13 +498,15 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
       if (!isNew) {
         agentId = agent.agent_id;
         await api.put(`/agents/${agentId}`, { nom, prenom, matricule, email, telephone, type_contrat: typeContrat || null });
+        const roulementChanged = roulementId !== originalRoulementId;
         await api.put(`/agents/assignments/${agent.id}`, {
-          cellule_id: celluleId,
-          specialite_id: specialiteId || null,
-          roulement_id: roulementId || null,
-          date_debut: dateDebut,
-          is_active: isActive,
+          cellule_id:           celluleId,
+          specialite_id:        specialiteId || null,
+          roulement_id:         roulementId || null,
+          date_debut:           dateDebut,
+          is_active:            isActive,
           date_debut_reference: roulementNeedsDateRef ? (dateRefAgent || null) : null,
+          ...(roulementChanged && roulementId ? { date_effet_roulement: dateEffetRoulement } : {}),
         });
       } else {
         const created = await api.post('/agents', {
@@ -516,83 +539,87 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
     }
   }
 
+  const sectionLabel = (txt) => (
+    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 8 }}>
+      {txt}
+    </div>
+  );
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: 760, width: '95vw' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{isNew ? 'Nouvel agent' : 'Modifier agent'}{serviceName ? ` — ${serviceName}` : ''}</span>
           <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-body">
 
-          {/* ── Photo + Nom/Prénom ── */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-              <div
-                onDragOver={e => { e.preventDefault(); setPhotoDragging(true); }}
-                onDragLeave={() => setPhotoDragging(false)}
-                onDrop={handleFileDrop}
-                onClick={() => fileRef.current?.click()}
-                title="Photo d'identité — cliquer ou glisser (JPEG, PNG, WebP · max 5 Mo)"
-                style={{
-                  width: 60, height: 60, borderRadius: '50%',
-                  border: `2px dashed ${photoDragging ? 'var(--accent)' : 'var(--border)'}`,
-                  cursor: 'pointer', overflow: 'hidden',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: photoDragging ? 'var(--bg-hover)' : 'var(--bg-surface)',
-                  transition: 'border-color 0.15s, background 0.15s',
-                }}
-              >
-                {photoPreview
-                  ? <img src={photoPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : <span style={{ fontSize: 9, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3, padding: '0 6px' }}>Photo</span>
-                }
-              </div>
-              {photoPreview && (
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={e => { e.stopPropagation(); setPhotoFile(null); setPhotoMime(null); setPhotoPreview(null); setPhotoError(''); }}
-                  style={{ fontSize: 9, padding: '1px 6px' }}
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'row', gap: 24, alignItems: 'flex-start' }}>
+
+          {/* ── Colonne gauche : Identité ── */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {sectionLabel('Identité')}
+
+            {/* Photo + Nom/Prénom */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <div
+                  onDragOver={e => { e.preventDefault(); setPhotoDragging(true); }}
+                  onDragLeave={() => setPhotoDragging(false)}
+                  onDrop={handleFileDrop}
+                  onClick={() => fileRef.current?.click()}
+                  title="Photo d'identité — cliquer ou glisser (JPEG, PNG, WebP · max 5 Mo)"
+                  style={{
+                    width: 72, height: 72, borderRadius: '50%',
+                    border: `2px dashed ${photoDragging ? 'var(--accent)' : 'var(--border)'}`,
+                    cursor: 'pointer', overflow: 'hidden',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: photoDragging ? 'var(--bg-hover)' : 'var(--bg-surface)',
+                    transition: 'border-color 0.15s, background 0.15s',
+                  }}
                 >
-                  Retirer
-                </button>
-              )}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div className="form-row" style={{ marginBottom: 0 }}>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label>Nom *</label>
-                  <input value={nom} onChange={e => setNom(e.target.value)} />
+                  {photoPreview
+                    ? <img src={photoPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: 9, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3, padding: '0 4px' }}>Photo</span>
+                  }
                 </div>
-                <div className="form-group" style={{ flex: 1 }}>
+                {photoPreview && (
+                  <button type="button" className="btn btn-sm"
+                    onClick={e => { e.stopPropagation(); setPhotoFile(null); setPhotoMime(null); setPhotoPreview(null); setPhotoError(''); }}
+                    style={{ fontSize: 9, padding: '1px 6px' }}>
+                    Retirer
+                  </button>
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div className="form-group" style={{ marginBottom: 6 }}>
+                  <label>Nom *</label>
+                  <input value={nom} onChange={e => setNom(e.target.value)} autoFocus />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>Prénom</label>
                   <input value={prenom} onChange={e => setPrenom(e.target.value)} />
                 </div>
               </div>
-              {photoError && (
-                <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>{photoError}</div>
-              )}
             </div>
+            {photoError && <div style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 6 }}>{photoError}</div>}
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
               onChange={e => handleFileChange(e.target.files[0])} />
-          </div>
 
-          {/* ── Identité ── */}
-          <div className="form-row">
-            <div className="form-group" style={{ flex: 1 }}>
+            <div className="form-group">
               <label>Matricule *</label>
               <input value={matricule} onChange={e => setMatricule(e.target.value)}
                 style={{ fontFamily: 'var(--font-mono)' }} />
             </div>
-            <div className="form-group" style={{ flex: 1 }}>
+            <div className="form-group">
               <label>Téléphone</label>
               <input type="tel" value={telephone} onChange={e => setTelephone(e.target.value)}
                 style={{ fontFamily: 'var(--font-mono)' }} />
             </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group" style={{ flex: 1 }}>
+            <div className="form-group">
+              <label>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
+            </div>
+            <div className="form-group">
               <label>Type de contrat</label>
               <select value={typeContrat} onChange={e => setTypeContrat(e.target.value)}>
                 <option value="">— Non renseigné —</option>
@@ -602,20 +629,18 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
                 <option value="INTERIM">INTERIM</option>
               </select>
             </div>
-            <div className="form-group" style={{ flex: 1 }}>
-              <label>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
-            </div>
           </div>
 
-          {/* ── Affectation ── */}
+          {/* ── Séparateur vertical ── */}
           {serviceId && (
-            <>
-              <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0 8px', paddingTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-                  Affectation
-                </span>
-              </div>
+            <div style={{ width: 1, background: 'var(--border)', alignSelf: 'stretch', flexShrink: 0 }} />
+          )}
+
+          {/* ── Colonne droite : Affectation ── */}
+          {serviceId && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {sectionLabel('Affectation')}
+
               <div className="form-group">
                 <label>Cellule *</label>
                 <select value={celluleId} onChange={e => { setCelluleId(e.target.value); setSpecialiteId(''); }}>
@@ -623,42 +648,48 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
                   {cellules.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
                 </select>
               </div>
-              <div className="form-row">
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label>Spécialité</label>
-                  <select value={specialiteId} onChange={e => setSpecialiteId(e.target.value)}>
-                    <option value="">— Aucune —</option>
-                    {specialites.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
-                  </select>
-                </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label>Roulement</label>
-                  <select value={roulementId} onChange={e => { setRoulementId(e.target.value); setDateRefAgent(''); }}>
-                    <option value="">— Aucun —</option>
-                    {roulements.map(r => (
-                      <option key={r.id} value={r.id}>
-                        {r.nom}{r.date_ref_par_agent ? ' ★' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
+              <div className="form-group">
+                <label>Spécialité</label>
+                <select value={specialiteId} onChange={e => setSpecialiteId(e.target.value)}>
+                  <option value="">— Aucune —</option>
+                  {specialites.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
+                </select>
               </div>
+
+              <div className="form-group">
+                <label>Roulement</label>
+                <select value={roulementId} onChange={e => { setRoulementId(e.target.value); setDateRefAgent(''); }}>
+                  <option value="">— Aucun —</option>
+                  {roulements.map(r => (
+                    <option key={r.id} value={r.id}>{r.nom}{r.date_ref_par_agent ? ' ★' : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              {!isNew && roulementId && roulementId !== originalRoulementId && (
+                <div className="form-group">
+                  <label>Date d'effet du nouveau roulement *</label>
+                  <input type="date" value={dateEffetRoulement} onChange={e => setDateEffetRoulement(e.target.value)} />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    Le théorique avant cette date reste calculé avec l'ancien roulement.
+                  </div>
+                </div>
+              )}
+
               {roulementNeedsDateRef && (
                 <div className="form-group">
-                  <label>Date de référence du roulement pour cet agent *</label>
-                  <input
-                    type="date"
-                    value={dateRefAgent}
-                    onChange={e => setDateRefAgent(e.target.value)}
-                  />
+                  <label>Date de référence (agent) *</label>
+                  <input type="date" value={dateRefAgent} onChange={e => setDateRefAgent(e.target.value)} />
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
                     Ce roulement utilise une date de référence propre à chaque agent (★).
                   </div>
                 </div>
               )}
+
               <div className="form-row">
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Date de début d'affectation *</label>
+                  <label>Début d'affectation *</label>
                   <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
                 </div>
                 <div className="form-group" style={{ flex: 1, justifyContent: 'flex-end' }}>
@@ -672,14 +703,82 @@ function AgentModal({ agent, serviceId, serviceName, api, onClose, onSaved }) {
                   </label>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
+
         <div className="modal-footer">
           <button className="btn" onClick={onClose}>Annuler</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={!canSave || saving}>
             {saving ? 'Enregistrement…' : 'Enregistrer'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoulementHistoryModal({ assignment, api, onClose }) {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get(`/agents/assignments/${assignment.id}/roulements`)
+      .then(setHistory)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [assignment.id]);
+
+  const nom = `${assignment.agents?.prenom || ''} ${assignment.agents?.nom || ''}`.trim();
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Historique des roulements — {nom}</span>
+          <button className="btn btn-sm btn-icon" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{ padding: 0 }}>
+          {loading ? (
+            <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>Chargement…</div>
+          ) : history.length === 0 ? (
+            <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>Aucun historique disponible.</div>
+          ) : (
+            <table className="data-table" style={{ margin: 0, borderRadius: 0 }}>
+              <thead>
+                <tr>
+                  <th>Roulement</th>
+                  <th>Depuis</th>
+                  <th>Jusqu'au</th>
+                  <th>Date réf.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((h, i) => (
+                  <tr key={h.id} style={i === 0 ? { background: 'var(--bg-panel)' } : {}}>
+                    <td style={{ fontWeight: i === 0 ? 600 : 400 }}>
+                      {h.roulements?.nom || '—'}
+                      {i === 0 && (
+                        <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 5px', borderRadius: 8, background: 'var(--accent)', color: '#fff' }}>
+                          actuel
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtDate(h.date_debut)}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: h.date_fin ? 'inherit' : 'var(--text-muted)' }}>
+                      {h.date_fin ? fmtDate(h.date_fin) : '—'}
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
+                      {fmtDate(h.date_debut_reference || h.roulements?.date_debut_reference)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onClose}>Fermer</button>
         </div>
       </div>
     </div>

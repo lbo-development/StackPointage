@@ -38,11 +38,7 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, _mode = 'reel')
   // 5. Agents avec affectations actives dans la plage
   const { data: assignments, error: errA } = await supabase
     .from('agent_assignments')
-    .select(`
-      *,
-      agents(*),
-      roulements(*, roulement_cycles(*))
-    `)
+    .select('*, agents(*)')
     .eq('service_id', serviceId)
     .eq('is_active', true)
     .lte('date_debut', dateFin)
@@ -53,7 +49,34 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, _mode = 'reel')
     return { dates, cellules, specialites, agents: [], cumuls: {}, feries: [...feriesSet] };
   }
 
-  const agentIds = assignments.map(a => a.agent_id);
+  const agentIds      = assignments.map(a => a.agent_id);
+  const assignmentIds = assignments.map(a => a.id);
+
+  // 5b. Historique des roulements pour ces affectations, sur la plage demandée
+  const { data: roulementHistory } = await supabase
+    .from('assignment_roulements')
+    .select('*, roulements(*, roulement_cycles(*))')
+    .in('assignment_id', assignmentIds)
+    .lte('date_debut', dateFin)
+    .or(`date_fin.is.null,date_fin.gte.${dateDebut}`);
+
+  // Index : assignmentId → liste triée par date_debut
+  const historyByAssignment = {};
+  for (const h of (roulementHistory || [])) {
+    if (!historyByAssignment[h.assignment_id]) historyByAssignment[h.assignment_id] = [];
+    historyByAssignment[h.assignment_id].push(h);
+  }
+  for (const id of Object.keys(historyByAssignment)) {
+    historyByAssignment[id].sort((a, b) => a.date_debut.localeCompare(b.date_debut));
+  }
+
+  // Retourne l'entrée d'historique active pour une affectation à une date donnée
+  function getRoulement(assignmentId, dateStr) {
+    const history = historyByAssignment[assignmentId] || [];
+    return history.find(h =>
+      h.date_debut <= dateStr && (h.date_fin === null || h.date_fin >= dateStr)
+    ) || null;
+  }
 
   // 6. Pointages réels
   const { data: pointages } = await supabase
@@ -110,14 +133,17 @@ export async function buildMatrix(serviceId, dateDebut, dateFin, _mode = 'reel')
   // 10. Construction de la matrice agents
   const agentsMatrix = assignments.map(assignment => {
     const agent = assignment.agents;
-    const roulement = assignment.roulements;
-    const cycles = roulement?.roulement_cycles || [];
 
     const ligneReel = {};
     const ligneTheorique = {};
-    const dateRefOverride = assignment.date_debut_reference || null;
 
     dates.forEach(dateStr => {
+      // Roulement actif à cette date précise
+      const histEntry     = getRoulement(assignment.id, dateStr);
+      const roulement     = histEntry?.roulements || null;
+      const cycles        = roulement?.roulement_cycles || [];
+      const dateRefOverride = histEntry?.date_debut_reference || null;
+
       // Code réel (saisi)
       const reel = rPointages[agent.id]?.[dateStr] || null;
 
