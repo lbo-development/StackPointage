@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -137,11 +137,8 @@ export default function LoginPage() {
   const [password,    setPassword]    = useState('');
   const [error,       setError]       = useState('');
   const [loading,     setLoading]     = useState(false);
-  const [emailMode,   setEmailMode]   = useState(false); // fallback admin
+  const [emailMode,   setEmailMode]   = useState(false);
   const [email,       setEmail]       = useState('');
-  const [pwdUnlocked, setPwdUnlocked] = useState(false);
-  const [emailUnlocked, setEmailUnlocked] = useState(false);
-
   // Chargement de la liste des profils (endpoint public, sans auth)
   useEffect(() => {
     fetch(`${API_BASE}/auth/users-list`)
@@ -151,10 +148,9 @@ export default function LoginPage() {
       .finally(() => setProfilesLoading(false));
   }, []);
 
-  // Efface le mot de passe et reset le verrou à chaque changement de profil
+  // Efface le mot de passe à chaque changement de profil
   useEffect(() => {
     setPassword('');
-    setPwdUnlocked(false);
   }, [selectedId, emailMode]);
 
   async function handleSubmit(e) {
@@ -215,9 +211,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="nom@service.fr"
-                autoComplete="off"
-                readOnly={!emailUnlocked}
-                onFocus={() => setEmailUnlocked(true)}
+                autoComplete="new-password"
                 required
                 autoFocus
                 style={{ width: '100%' }}
@@ -243,11 +237,9 @@ export default function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
-              autoComplete="off"
+              autoComplete="new-password"
               data-lpignore="true"
               data-1p-ignore="true"
-              readOnly={!pwdUnlocked}
-              onFocus={() => setPwdUnlocked(true)}
               required
               style={{ width: '100%', WebkitTextSecurity: 'disc', fontFamily: 'monospace' }}
             />
