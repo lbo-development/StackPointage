@@ -17,6 +17,7 @@ CREATE TABLE formations (
 
 -- ============================================================
 -- TABLE: formation_documents
+-- Plusieurs documents par formation (programme, texte réglementaire…)
 -- ============================================================
 CREATE TABLE formation_documents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -41,8 +42,8 @@ CREATE TABLE profils_formation (
 
 -- ============================================================
 -- TABLE: profil_formation_items
--- Une formation dans un profil, avec statut d'obligation
--- et fréquence de recyclage optionnellement surchargée
+-- Formation dans un profil avec statut d'obligation et fréquence
+-- surchargeable (NULL = hérite de la formation)
 -- ============================================================
 CREATE TABLE profil_formation_items (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -56,7 +57,7 @@ CREATE TABLE profil_formation_items (
 
 -- ============================================================
 -- TABLE: agent_profil_formation
--- Affectation d'un profil de formation à un agent (1 seul actif)
+-- Un seul profil actif par agent (UNIQUE sur agent_id)
 -- ============================================================
 CREATE TABLE agent_profil_formation (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -68,7 +69,10 @@ CREATE TABLE agent_profil_formation (
 );
 
 -- ============================================================
--- TABLE: agent_formations (suivi réalisations)
+-- TABLE: agent_formations (historique complet des réalisations)
+-- Pas de UNIQUE : un agent peut avoir plusieurs entrées par formation
+-- (historique + nouvelles réalisations)
+-- is_historique distingue les imports Excel des saisies applicatives
 -- ============================================================
 CREATE TABLE agent_formations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -79,10 +83,10 @@ CREATE TABLE agent_formations (
   statut TEXT NOT NULL DEFAULT 'planifiee' CHECK (statut IN ('planifiee', 'realisee', 'annulee')),
   commentaire TEXT,
   document_url TEXT,
+  is_historique BOOLEAN DEFAULT FALSE,
   saisi_par UUID REFERENCES profiles(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(agent_id, formation_id)
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================================
@@ -93,6 +97,8 @@ CREATE INDEX idx_profil_formation_items_profil ON profil_formation_items(profil_
 CREATE INDEX idx_profil_formation_items_formation ON profil_formation_items(formation_id);
 CREATE INDEX idx_agent_formations_agent ON agent_formations(agent_id);
 CREATE INDEX idx_agent_formations_formation ON agent_formations(formation_id);
+-- Pour retrouver rapidement la dernière réalisation par agent/formation
+CREATE INDEX idx_agent_formations_agent_formation_date ON agent_formations(agent_id, formation_id, date_realisee DESC NULLS LAST);
 
 -- ============================================================
 -- TRIGGERS updated_at
