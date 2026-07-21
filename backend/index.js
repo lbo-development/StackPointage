@@ -49,13 +49,8 @@ const isProd = allowedOrigins.every((o) => !o.includes("localhost"));
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) {
-        // Dev : le proxy Vite ne transmet pas l'Origin → on laisse passer
-        // Prod : toute requête sans Origin est rejetée (Postman, curl, etc.)
-        return isProd
-          ? callback(new Error("Origine CORS manquante"))
-          : callback(null, true);
-      }
+      // Pas d'Origin : health check Railway, requête interne ou même domaine
+      if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
