@@ -4,6 +4,12 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import fs from "fs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const frontendDist = join(__dirname, "../frontend/dist");
 
 import authRoutes from "./routes/auth.js";
 import agentsRoutes from "./routes/agents.js";
@@ -82,6 +88,14 @@ app.use("/api/stats", statsRoutes);
 app.get("/api/health", (req, res) =>
   res.json({ status: "ok", timestamp: new Date() }),
 );
+
+// Serve frontend React (prod : même service que le backend)
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(join(frontendDist, "index.html"));
+  });
+}
 
 app.use((err, req, res, _next) => {
   console.error(err.stack);
